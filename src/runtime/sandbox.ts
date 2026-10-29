@@ -11,6 +11,8 @@ export interface RunConfig {
   dpr: number;
   mode: "play" | "edit" | "preview";
   channel: string;
+  /** Render only this region (device pixels) of the full image, for tiled export. */
+  tile?: { x: number; y: number; w: number; h: number };
 }
 
 /** Escapes text so it can't close the surrounding <script> element. */
@@ -35,7 +37,8 @@ canvas,svg{display:block;max-width:100%;max-height:100%;width:auto;height:auto;o
 <script type="module">
 `;
   const lineOffset = head.split("\n").length - 1;
-  return head.replace('"lineOffset":0', `"lineOffset":${lineOffset}`) + scriptSafe(loopProtect(code)) + "\n</script></body></html>";
+  // __labDone runs once the sketch's top-level code has finished (static drawing is complete).
+  return head.replace('"lineOffset":0', `"lineOffset":${lineOffset}`) + scriptSafe(loopProtect(code)) + "\n;window.__labDone();\n</script></body></html>";
 }
 
 export type SandboxMessage =
@@ -44,7 +47,8 @@ export type SandboxMessage =
   | { type: "lab:error"; channel: string; message: string; line?: number }
   | { type: "lab:log"; channel: string; level: string; text: string }
   | { type: "lab:capture"; channel: string; blob?: Blob; width?: number; height?: number; error?: string }
-  | { type: "lab:traits"; channel: string; traits: Record<string, unknown> };
+  | { type: "lab:traits"; channel: string; traits: Record<string, unknown> }
+  | { type: "lab:done"; channel: string };
 
 export interface ParamSpec {
   type: string;

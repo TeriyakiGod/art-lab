@@ -190,6 +190,10 @@
     return readParam;
   };
 
+  // Called after the sketch's top-level code. A timeout (not rAF, which is
+  // throttled in hidden cross-origin frames) lets pending paints settle.
+  window.__labDone = () => setTimeout(() => post({ type: "lab:done" }), 0);
+
   window.addEventListener("message", (e) => {
     if (e.source !== parent || e.data?.channel !== cfg.channel) return;
     if (e.data.type === "lab:capture-request") capture(undefined, e.data.maxSize);
@@ -201,11 +205,14 @@
     canvas() {
       const { width, height, dpr } = $genart.screen;
       const canvas = document.createElement("canvas");
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
+      const tile = cfg.tile;
+      canvas.width = tile ? tile.w : Math.round(width * dpr);
+      canvas.height = tile ? tile.h : Math.round(height * dpr);
       document.body.appendChild(canvas);
       const ctx = canvas.getContext("2d");
-      ctx.scale(dpr, dpr);
+      // A tile draws the same picture, shifted so only its region lands on the canvas.
+      if (tile) ctx.setTransform(dpr, 0, 0, dpr, -tile.x, -tile.y);
+      else ctx.scale(dpr, dpr);
       mainCanvas = canvas;
       return { canvas, ctx, width, height };
     },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Output, Sketch, Version } from "../../shared/types";
 import { SketchFrame, renderToPNG, type SketchFrameHandle } from "../runtime/SketchFrame";
+import { SINGLE_CANVAS_PIXELS, renderLargePNG } from "../runtime/bigExport";
 import type { ParamSpec } from "../runtime/sandbox";
 import { api, json } from "../lib/api";
 import { ensureSynced, getSketch, randomSeed, saveSketch } from "../lib/store";
@@ -112,7 +113,11 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   const exportPNG = async (scale: number) => {
     setBusy(`Rendering ${scale}×…`);
     try {
-      const blob = await renderToPNG({ code: sketch.code, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale });
+      const opts = { code: sketch.code, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale };
+      // Too big for one canvas (especially on phones): render in strips.
+      const blob = sketch.width * sketch.height * scale * scale > SINGLE_CANVAS_PIXELS
+        ? await renderLargePNG(opts, (done, total) => setBusy(`Rendering ${scale}×… ${Math.round((done / total) * 100)}%`))
+        : await renderToPNG(opts);
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `${sketch.title.replace(/\W+/g, "-").toLowerCase() || "sketch"}-${sketch.seed}@${scale}x.png`;
@@ -290,7 +295,7 @@ function ExportMenu({ disabled, onExport, onVersion }: { disabled: boolean; onEx
     <details className="menu" ref={menu}>
       <summary aria-disabled={disabled}>Export ▾</summary>
       <div className="menu-list">
-        {[1, 2, 4].map((s) => <button key={s} disabled={disabled} onClick={pick(() => onExport(s))}>PNG {s}×</button>)}
+        {[1, 2, 4, 8].map((s) => <button key={s} disabled={disabled} onClick={pick(() => onExport(s))}>PNG {s}×</button>)}
         <button onClick={pick(onVersion)}>Save code version…</button>
       </div>
     </details>

@@ -112,7 +112,8 @@ function requestCapture(frame: HTMLIFrameElement | null, channel: string, maxSiz
 
 /**
  * Renders a sketch in a hidden iframe at `scale`× resolution and returns the PNG.
- * Waits until params are reported, then a short settle time for drawing.
+ * Captures once the sketch's top-level code has finished; sketches that never
+ * finish (e.g. awaiting forever) are captured a few seconds after their params.
  */
 export function renderToPNG(opts: Omit<RunConfig, "channel" | "mode" | "dpr"> & { scale: number }): Promise<Blob> {
   const channel = newChannel();
@@ -123,16 +124,22 @@ export function renderToPNG(opts: Omit<RunConfig, "channel" | "mode" | "dpr"> & 
   document.body.appendChild(frame);
   const cleanup = () => frame.remove();
   return new Promise<Blob>((resolve, reject) => {
-    const fail = setTimeout(() => (stop(), reject(new Error("render timed out"))), 30_000);
+    const fail = setTimeout(() => (stop(), reject(new Error("render timed out"))), 60_000);
+    let fallback: ReturnType<typeof setTimeout> | undefined;
     const stop = listen(() => frame, channel, (m) => {
       if (m.type === "lab:error") {
         clearTimeout(fail);
+        clearTimeout(fallback);
         stop();
         reject(new Error(m.message));
-      } else if (m.type === "lab:params") {
+      } else if (m.type === "lab:done") {
         clearTimeout(fail);
+        clearTimeout(fallback);
         stop();
-        setTimeout(() => requestCapture(frame, channel).then(resolve, reject), 400);
+        requestCapture(frame, channel).then(resolve, reject);
+      } else if (m.type === "lab:params") {
+        clearTimeout(fallback);
+        fallback = setTimeout(() => (clearTimeout(fail), stop(), requestCapture(frame, channel).then(resolve, reject)), 5000);
       }
     });
   }).finally(cleanup);
