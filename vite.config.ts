@@ -11,6 +11,8 @@ export default defineConfig({
     cloudflare({ remoteBindings: process.env.CF_LOCAL !== "1" }),
     VitePWA({
       registerType: "autoUpdate",
+      // Cloudflare Access sits in front of the app; without cookies the manifest fetch gets the login redirect.
+      useCredentials: true,
       includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Art Lab",
