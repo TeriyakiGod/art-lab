@@ -4,7 +4,8 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart } from "ai";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatBody, type Sketch } from "../../shared/types";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, modelSees, type ChatBody, type Sketch } from "../../shared/types";
+import { LOOK_TOOL } from "../../shared/chatImages";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   lessonId?: string;
   onApplyCode(code: string): void;
   onSetParams(values: Record<string, unknown>): void;
+  /** A small JPEG data URL of the canvas as drawn right now. */
+  capture(): Promise<string>;
 }
 
 const MODEL_KEY = "art-lab:chat-model";
@@ -34,6 +37,8 @@ export function ChatPanel(props: Props) {
     } catch { return DEFAULT_CHAT_MODEL; }
   });
   const [input, setInput] = useState("");
+  const [attach, setAttach] = useState(false);
+  const sees = modelSees(model);
   const latest = useRef(props);
   latest.current = props;
   const modelRef = useRef(model);
@@ -58,6 +63,13 @@ export function ChatPanel(props: Props) {
         latest.current.onSetParams(values);
         addToolOutput({ toolCallId: toolCall.toolCallId, output: { applied: Object.keys(values) } });
       }
+      if (toolCall.toolName === LOOK_TOOL) {
+        try {
+          addToolOutput({ toolCallId: toolCall.toolCallId, output: { image: await latest.current.capture() } });
+        } catch (e) {
+          addToolOutput({ toolCallId: toolCall.toolCallId, output: { error: `Couldn't capture the canvas: ${(e as Error).message}` } });
+        }
+      }
       // propose_edit waits for the user's Accept / Reject in the message list.
     },
   });
@@ -78,10 +90,17 @@ export function ChatPanel(props: Props) {
       (tail.type === "reasoning" && tail.state === "streaming" && !!tail.text.trim()) ||
       (isToolUIPart(tail) && (tail.state === "input-streaming" || tail.state === "input-available")));
   const working = busy && !tailLive;
-  const send = (text: string) => {
+  const send = async (text: string) => {
     if (!text.trim() || busy) return;
-    sendMessage({ role: "user", parts: [{ type: "text", text }] });
     setInput("");
+    const parts: ({ type: "text"; text: string } | { type: "file"; mediaType: string; url: string })[] = [{ type: "text", text }];
+    if (attach && sees) {
+      setAttach(false); // one snapshot per message
+      try {
+        parts.push({ type: "file", mediaType: "image/jpeg", url: await props.capture() });
+      } catch { /* send without the snapshot */ }
+    }
+    sendMessage({ role: "user", parts });
   };
 
   return (
@@ -113,10 +132,20 @@ export function ChatPanel(props: Props) {
           <div key={m.id} className={`msg ${m.role}`}>
             {m.parts.map((part, i) => {
               if (part.type === "text") return <div key={i} className="md"><Markdown remarkPlugins={[remarkGfm]}>{part.text}</Markdown></div>;
+              if (part.type === "file" && part.mediaType.startsWith("image/")) return <img key={i} className="chat-image" src={part.url} alt="Canvas snapshot" />;
               if (part.type === "reasoning") return part.text.trim() ? <Reasoning key={i} text={part.text} live={part.state === "streaming"} /> : null;
               if (!isToolUIPart(part)) return null;
               const name = getToolName(part);
               const pending = part.state === "input-streaming" || part.state === "input-available";
+              if (name === LOOK_TOOL) {
+                const image = "output" in part ? (part.output as { image?: string } | undefined)?.image : undefined;
+                return (
+                  <div key={i} className={`tool-note${pending ? " live" : ""}`}>
+                    {pending ? "👀 Looking at the canvas…" : "👀 Looked at the canvas"}
+                    {image && <img className="chat-image" src={image} alt="What the assistant saw" />}
+                  </div>
+                );
+              }
               if (name === "propose_edit") {
                 const input = part.input as { code?: string; summary?: string } | undefined;
                 return (
@@ -169,6 +198,18 @@ export function ChatPanel(props: Props) {
             }
           }}
         />
+        <button
+          type="button"
+          className={`icon attach ${attach && sees ? "on" : ""}`}
+          aria-pressed={attach && sees}
+          disabled={!sees}
+          title={sees ? "Attach a snapshot of the canvas to your message" : "This model can't see images. Pick Balanced to share the canvas."}
+          onClick={() => setAttach(!attach)}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" />
+          </svg>
+        </button>
         {busy ? <button type="button" onClick={() => stop()}>Stop</button> : <button type="submit" disabled={!input.trim()}>Send</button>}
       </form>
     </div>

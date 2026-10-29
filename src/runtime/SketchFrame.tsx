@@ -8,8 +8,8 @@ export interface SketchError {
 }
 
 export interface SketchFrameHandle {
-  /** PNG of the current canvas, optionally downscaled so its longest side is maxSize. */
-  capture(maxSize?: number): Promise<Blob>;
+  /** The current canvas as PNG (or JPEG), optionally downscaled so its longest side is maxSize. */
+  capture(maxSize?: number, format?: "image/png" | "image/jpeg"): Promise<Blob>;
 }
 
 interface Props {
@@ -91,7 +91,8 @@ export const SketchFrame = forwardRef<SketchFrameHandle, Props>(function SketchF
   }, [run]);
 
   useImperativeHandle(ref, () => ({
-    capture: (maxSize?: number) => (run ? requestCapture(iframe.current, run.channel, maxSize) : Promise.reject(new Error("sketch not running"))),
+    capture: (maxSize?: number, format?: "image/png" | "image/jpeg") =>
+      run ? requestCapture(iframe.current, run.channel, maxSize, format) : Promise.reject(new Error("sketch not running")),
   }), [run]);
 
   return (
@@ -106,7 +107,7 @@ export const SketchFrame = forwardRef<SketchFrameHandle, Props>(function SketchF
   );
 });
 
-function requestCapture(frame: HTMLIFrameElement | null, channel: string, maxSize?: number): Promise<Blob> {
+function requestCapture(frame: HTMLIFrameElement | null, channel: string, maxSize?: number, format?: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (!frame?.contentWindow) return reject(new Error("sketch not running"));
     const timeout = setTimeout(() => (stop(), reject(new Error("capture timed out"))), 10_000);
@@ -117,7 +118,7 @@ function requestCapture(frame: HTMLIFrameElement | null, channel: string, maxSiz
       if (m.blob) resolve(m.blob);
       else reject(new Error(m.error ?? "capture failed"));
     });
-    frame.contentWindow.postMessage({ type: "lab:capture-request", channel, maxSize }, "*");
+    frame.contentWindow.postMessage({ type: "lab:capture-request", channel, maxSize, format, quality: format === "image/jpeg" ? 0.8 : undefined }, "*");
   });
 }
 

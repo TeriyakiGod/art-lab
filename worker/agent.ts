@@ -2,7 +2,8 @@ import { AIChatAgent } from "@cloudflare/ai-chat";
 import { createAI, type CloudflareLanguageModelId } from "agents/models/ai-sdk";
 import { convertToModelMessages, isStepCount, streamText, tool } from "ai";
 import { z } from "zod";
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatBody } from "../shared/types";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, modelSees, type ChatBody } from "../shared/types";
+import { LOOK_TOOL, liftImages } from "../shared/chatImages";
 import { LESSONS, searchLessons } from "../shared/lessons";
 
 const SYSTEM = `You are the studio assistant in "Art Lab", a personal algorithmic art lab.
@@ -62,11 +63,15 @@ export class ChatAgent extends AIChatAgent<Env> {
     }
     if (body.errors?.length) context += `\n\nRecent sketch errors:\n${body.errors.slice(-5).join("\n").slice(0, 2000)}`;
     if (body.lessonId) context += `\n\nThe user is currently reading lesson ${body.lessonId}.`;
+    const vision = modelSees(modelId);
+    context += vision
+      ? `\n\nYou can see the canvas: call ${LOOK_TOOL} when the user asks how the sketch looks, or to check your change after the user accepts it. Describe what you actually see.`
+      : "\n\nYou can't see the canvas with this model. If the user asks how something looks, say so and suggest switching to the Balanced model, which can.";
 
     const result = streamText({
       model: ai(modelId as CloudflareLanguageModelId, modelId === DEFAULT_CHAT_MODEL ? {} : { fallback: [DEFAULT_CHAT_MODEL] }),
       system: SYSTEM + context,
-      messages: await convertToModelMessages(this.messages),
+      messages: liftImages(await convertToModelMessages(this.messages), vision),
       abortSignal: options?.abortSignal,
       tools: {
         propose_edit: tool({
@@ -85,6 +90,13 @@ export class ChatAgent extends AIChatAgent<Env> {
           inputSchema: z.object({ query: z.string() }),
           execute: async ({ query }) => searchLessons(query),
         }),
+        // Runs in the browser, which replies with { image: dataUrl } (see liftImages).
+        ...(vision ? {
+          [LOOK_TOOL]: tool({
+            description: "Take a snapshot of the sketch as it is currently drawn, to see what it looks like.",
+            inputSchema: z.object({}),
+          }),
+        } : {}),
       },
       stopWhen: isStepCount(6),
     });

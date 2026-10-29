@@ -155,7 +155,7 @@
   };
   let mainCanvas;
 
-  const capture = (el, maxSize) => {
+  const capture = (el, maxSize, type = "image/png", quality) => {
     el = el || mainCanvas || document.querySelector("canvas");
     if (!el || !(el instanceof HTMLCanvasElement)) return post({ type: "lab:capture", error: "no canvas" });
     let src = el;
@@ -166,7 +166,7 @@
       src.height = Math.round(el.height * k);
       src.getContext("2d").drawImage(el, 0, 0, src.width, src.height);
     }
-    src.toBlob((blob) => post({ type: "lab:capture", blob, width: el.width, height: el.height }), "image/png");
+    src.toBlob((blob) => post({ type: "lab:capture", blob, width: el.width, height: el.height }), type, quality);
   };
 
   $genart.setAdapter({
@@ -242,7 +242,7 @@
 
   window.addEventListener("message", (e) => {
     if (e.source !== parent || e.data?.channel !== cfg.channel) return;
-    if (e.data.type === "lab:capture-request") capture(undefined, e.data.maxSize);
+    if (e.data.type === "lab:capture-request") capture(undefined, e.data.maxSize, e.data.format, e.data.quality);
   });
 
   // ---- beginner helpers ----------------------------------------------------------

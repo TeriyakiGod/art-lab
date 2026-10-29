@@ -250,6 +250,8 @@ body.resizing iframe { pointer-events: none; }
 .md pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .md p { margin: 0.5em 0; }
 .tool-note { font-size: 0.85rem; color: var(--muted); }
+.chat-image { display: block; max-width: min(220px, 100%); border-radius: 8px; border: 1px solid var(--line); margin-top: 6px; }
+.attach.on { color: var(--accent); border-color: var(--accent); }
 .live { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.45; } }
 @media (prefers-reduced-motion: reduce) { .live { animation: none; } }

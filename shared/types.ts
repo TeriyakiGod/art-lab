@@ -52,13 +52,15 @@ export interface Output {
 
 export const CHAT_MODELS = [
   // Prices per M tokens (input / output) as of 2026-10. The last two need the Workers Paid plan.
-  { id: "@cf/zai-org/glm-4.7-flash", label: "Fast · GLM 4.7 Flash · $" }, // $0.06 / $0.40
-  { id: "@cf/zai-org/glm-5.3-flash", label: "Balanced · GLM 5.3 Flash · $$" }, // $0.15 / $0.50
-  { id: "@cf/zai-org/glm-5.3", label: "Powerful · GLM 5.3 · $$$" }, // $1.40 / $4.40
+  // `vision`: can look at canvas snapshots.
+  { id: "@cf/zai-org/glm-4.7-flash", label: "Fast · GLM 4.7 Flash · $", vision: false }, // $0.06 / $0.40
+  { id: "@cf/zai-org/glm-5.3-flash", label: "Balanced · GLM 5.3 Flash · $$", vision: true }, // $0.15 / $0.50
+  { id: "@cf/zai-org/glm-5.3", label: "Powerful · GLM 5.3 · $$$", vision: false }, // $1.40 / $4.40
 ] as const;
 
 export type ChatModelId = (typeof CHAT_MODELS)[number]["id"];
 export const DEFAULT_CHAT_MODEL: ChatModelId = "@cf/zai-org/glm-4.7-flash";
+export const modelSees = (id: string | undefined) => CHAT_MODELS.some((m) => m.id === id && m.vision);
 
 /** Extra data the client sends with every chat turn. */
 export type ChatBody = {

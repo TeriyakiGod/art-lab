@@ -196,6 +196,15 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
       errors={errors}
       onApplyCode={applyCode}
       onSetParams={(values) => update({ values: { ...sketch.values, ...values } })}
+      capture={async () => {
+        const blob = await frame.current!.capture(640, "image/jpeg");
+        return new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(r.error);
+          r.readAsDataURL(blob);
+        });
+      }}
     />
   );
 
