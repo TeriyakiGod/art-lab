@@ -119,9 +119,19 @@ input[type="text"], textarea, .seed-input, .title-input {
 
 .stage-pane { position: relative; }
 .stage {
-  flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; touch-action: pan-y;
+  position: relative; overflow: hidden; flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; touch-action: pan-y;
   background: radial-gradient(circle at 50% 40%, #1c1c22, #0c0c0e 70%);
 }
+.stage-zoom { align-self: stretch; justify-self: stretch; min-width: 0; min-height: 0; display: grid; place-items: center; transform-origin: center; will-change: transform; }
+.stage-touch { position: absolute; inset: 0; touch-action: none; }
+.zoom-reset { position: absolute; top: 10px; right: 10px; font-size: 0.8rem; min-height: 30px; }
+.studio.desktop { position: relative; }
+.pane-divider { position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; cursor: col-resize; z-index: 4; touch-action: none; }
+.pane-divider.code { left: var(--code-w); }
+.pane-divider.side { left: calc(100% - var(--side-w)); }
+.pane-divider:hover, body.resizing .pane-divider { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe { pointer-events: none; }
 .stage-frame { border: 0; display: block; max-width: 100%; max-height: 100%; width: 100%; height: auto; box-shadow: 0 10px 40px #0008; background: #000; }
 .stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .stage-error { margin: 0 8px; padding: 6px 10px; border-radius: 8px; background: #3a1416; color: #ffb3b3; font-size: 0.85rem; }

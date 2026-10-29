@@ -12,6 +12,7 @@ import { ChatPanel } from "./ChatPanel";
 import { Variations } from "./Variations";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 import { PalettePanel } from "./PalettePanel";
+import { useStageGestures } from "./useStageGestures";
 import { PALETTE_KEY } from "../../shared/palettes";
 
 export type StudioTab = "canvas" | "tweak" | "code" | "chat";
@@ -159,16 +160,13 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
     }
   };
 
-  // Horizontal swipe on the canvas = next / previous seed (mobile).
-  const swipe = useRef<{ x: number; y: number } | null>(null);
-  const onPointerDown = (e: React.PointerEvent) => (swipe.current = { x: e.clientX, y: e.clientY });
-  const onPointerUp = (e: React.PointerEvent) => {
-    const s = swipe.current;
-    swipe.current = null;
-    if (!s) return;
-    const dx = e.clientX - s.x, dy = e.clientY - s.y;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) dx < 0 ? setSeed(randomSeed()) : backSeed();
-  };
+  // Touch: swipe for seeds, pinch/pan to zoom, double-tap to reset, long-press to save.
+  const gestures = useStageGestures({
+    onSwipeLeft: () => setSeed(randomSeed()),
+    onSwipeRight: backSeed,
+    onLongPress: () => void saveOutput(),
+  });
+  const panes = usePaneWidths(desktop);
 
   const activePalette = sketch.values[PALETTE_KEY] as string[] | undefined;
   const tweak = (
@@ -202,7 +200,9 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   );
 
   return (
-    <div className={`studio ${desktop ? "desktop" : `mobile tab-${tab}`}`}>
+    <div className={`studio ${desktop ? "desktop" : `mobile tab-${tab}`}`} style={panes.style}>
+      {desktop && <PaneDivider side="code" onDrag={panes.drag} />}
+      {desktop && <PaneDivider side="side" onDrag={panes.drag} />}
       <section className="pane code-pane">
         <div className="pane-bar">
           <input className="title-input" aria-label="Sketch title" value={sketch.title} onChange={(e) => update({ title: e.target.value })} />
@@ -216,7 +216,8 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
       </section>
 
       <section className="pane stage-pane">
-        <div className="stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+        <div className="stage">
+          <div className="stage-zoom" style={gestures.style}>
           <SketchFrame
             ref={frame}
             className="stage-frame"
@@ -233,6 +234,10 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
             onError={(e) => setErrors((list) => [...list.slice(-9), e.line ? `Line ${e.line}: ${e.message}` : e.message])}
             onLog={(level, text) => setLogs((l) => [...l.slice(-99), { level, text }])}
           />
+          </div>
+          {/* Touches would go into the sketch iframe; this layer catches them first. */}
+          {!desktop && <div className="stage-touch" {...gestures.handlers} aria-hidden />}
+          {gestures.view.scale > 1 && <button className="zoom-reset" onClick={gestures.reset}>{Math.round(gestures.view.scale * 100)}% · reset</button>}
         </div>
         {!desktop && errors.length > 0 && <div className="stage-error" role="alert">{errors.at(-1)}</div>}
         <div className="stage-bar">
@@ -377,5 +382,44 @@ function VersionItem({ version, current, outputs, onRestore }: { version: Versio
         </div>
       )}
     </li>
+  );
+}
+
+const PANES_KEY = "art-lab:pane-widths";
+
+/** Desktop pane widths (code and side panel), draggable and remembered. */
+function usePaneWidths(desktop: boolean) {
+  const [w, setW] = useState<{ code: number; side: number }>(() => {
+    try { return { code: 440, side: 340, ...JSON.parse(localStorage.getItem(PANES_KEY) ?? "{}") }; } catch { return { code: 440, side: 340 }; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PANES_KEY, JSON.stringify(w)); } catch { /* private mode */ }
+  }, [w]);
+  const drag = (side: "code" | "side", clientX: number) => {
+    const total = window.innerWidth, minStage = 320;
+    setW((cur) => side === "code"
+      ? { ...cur, code: Math.round(Math.min(Math.max(280, clientX), total - cur.side - minStage)) }
+      : { ...cur, side: Math.round(Math.min(Math.max(280, total - clientX), total - cur.code - minStage)) });
+  };
+  return {
+    drag,
+    style: desktop ? ({ gridTemplateColumns: `${w.code}px minmax(320px, 1fr) ${w.side}px`, "--code-w": `${w.code}px`, "--side-w": `${w.side}px` } as React.CSSProperties) : undefined,
+  };
+}
+
+function PaneDivider({ side, onDrag }: { side: "code" | "side"; onDrag(side: "code" | "side", clientX: number): void }) {
+  return (
+    <div
+      className={`pane-divider ${side}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={side === "code" ? "Resize the code pane" : "Resize the side panel"}
+      onPointerDown={(e) => {
+        (e.target as Element).setPointerCapture(e.pointerId);
+        document.body.classList.add("resizing");
+      }}
+      onPointerMove={(e) => e.buttons === 1 && onDrag(side, e.clientX)}
+      onPointerUp={() => document.body.classList.remove("resizing")}
+    />
   );
 }
