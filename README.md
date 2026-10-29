@@ -66,8 +66,9 @@ Repository settings → Secrets and variables → Actions:
 
 The deploy fails early with a clear message if any of these are missing.
 
-The GLM 5.3 Flash and Kimi K2.7 models need the Workers Paid plan; GLM 4.7 Flash works on Free
-and is the automatic fallback.
+The assistant has three tiers: **Fast** (GLM 4.7 Flash, works on the Free plan), **Balanced**
+(GLM 5.3 Flash) and **Powerful** (GLM 5.3, about 10× the price of Balanced). The last two need the
+Workers Paid plan; if a call to them fails, the assistant falls back to Fast.
 
 ## Writing sketches
 

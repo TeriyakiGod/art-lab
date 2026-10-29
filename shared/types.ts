@@ -31,9 +31,10 @@ export interface Output {
 }
 
 export const CHAT_MODELS = [
-  { id: "@cf/zai-org/glm-4.7-flash", label: "GLM 4.7 Flash (fast)" },
-  { id: "@cf/zai-org/glm-5.3-flash", label: "GLM 5.3 Flash (paid plan)" },
-  { id: "@cf/moonshotai/kimi-k2.7-code", label: "Kimi K2.7 Code (paid plan)" },
+  // Prices per M tokens (input / output) as of 2026-10. The last two need the Workers Paid plan.
+  { id: "@cf/zai-org/glm-4.7-flash", label: "Fast · GLM 4.7 Flash · $" }, // $0.06 / $0.40
+  { id: "@cf/zai-org/glm-5.3-flash", label: "Balanced · GLM 5.3 Flash · $$" }, // $0.15 / $0.50
+  { id: "@cf/zai-org/glm-5.3", label: "Powerful · GLM 5.3 · $$$" }, // $1.40 / $4.40
 ] as const;
 
 export type ChatModelId = (typeof CHAT_MODELS)[number]["id"];

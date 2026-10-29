@@ -27,7 +27,11 @@ const SUGGESTIONS = [
 export function ChatPanel(props: Props) {
   const { userId, sketch } = props;
   const [model, setModel] = useState<string>(() => {
-    try { return localStorage.getItem(MODEL_KEY) ?? DEFAULT_CHAT_MODEL; } catch { return DEFAULT_CHAT_MODEL; }
+    try {
+      const saved = localStorage.getItem(MODEL_KEY);
+      // A model dropped from the list falls back to the default.
+      return CHAT_MODELS.some((m) => m.id === saved) ? saved! : DEFAULT_CHAT_MODEL;
+    } catch { return DEFAULT_CHAT_MODEL; }
   });
   const [input, setInput] = useState("");
   const latest = useRef(props);
