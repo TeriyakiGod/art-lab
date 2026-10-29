@@ -8,6 +8,7 @@ import { Editor } from "./Editor";
 import { ParamsPanel } from "./ParamsPanel";
 import { SeedBar } from "./SeedBar";
 import { ChatPanel } from "./ChatPanel";
+import { Variations } from "./Variations";
 
 export type StudioTab = "canvas" | "tweak" | "code" | "chat";
 type SideTab = "tweak" | "chat" | "saved";
@@ -48,6 +49,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   const [autoRun, setAutoRun] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showVariations, setShowVariations] = useState(false);
   const frame = useRef<SketchFrameHandle>(null);
 
   // Slider drags fire many changes; re-run the sketch at most every ~80 ms.
@@ -218,6 +220,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
         <div className="stage-bar">
           <SeedBar seed={sketch.seed} history={seedHistory} onSeed={setSeed} onBack={backSeed} />
           <div className="row">
+            <button onClick={() => setShowVariations(true)} title="Explore 16 variations of this sketch">Variations</button>
             <button onClick={saveOutput} disabled={!!busy} title="Save this seed + params as an output">★ Save</button>
             <ExportMenu disabled={!!busy} onExport={exportPNG} onVersion={saveVersion} />
           </div>
@@ -248,6 +251,18 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
         </>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
+      {showVariations && (
+        <Variations
+          sketch={sketch}
+          specs={specs}
+          onClose={() => setShowVariations(false)}
+          onPick={(v) => {
+            setSeedHistory((h) => [...h.slice(-49), sketch.seed]);
+            update({ seed: v.seed, values: v.values });
+            setShowVariations(false);
+          }}
+        />
+      )}
     </div>
   );
 }
