@@ -1,0 +1,200 @@
+import { useEffect, useRef, useState } from "react";
+import { useAgent } from "agents/react";
+import { useAgentChat } from "@cloudflare/ai-chat/react";
+import { getToolName, isToolUIPart } from "ai";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatBody, type Sketch } from "../../shared/types";
+import { compact, diffLines } from "../lib/diff";
+
+interface Props {
+  userId: string;
+  sketch: Sketch;
+  errors: string[];
+  lessonId?: string;
+  onApplyCode(code: string): void;
+  onSetParams(values: Record<string, unknown>): void;
+}
+
+const MODEL_KEY = "art-lab:chat-model";
+const SUGGESTIONS = [
+  "Explain this sketch line by line",
+  "Add a parameter for the background color",
+  "Make it feel more organic",
+  "Why does changing the seed change the picture?",
+];
+
+export function ChatPanel(props: Props) {
+  const { userId, sketch } = props;
+  const [model, setModel] = useState<string>(() => {
+    try { return localStorage.getItem(MODEL_KEY) ?? DEFAULT_CHAT_MODEL; } catch { return DEFAULT_CHAT_MODEL; }
+  });
+  const [input, setInput] = useState("");
+  const latest = useRef(props);
+  latest.current = props;
+  const modelRef = useRef(model);
+  modelRef.current = model;
+
+  // One conversation per sketch; the server only lets a user reach agents prefixed with their id.
+  const agent = useAgent({ agent: "ChatAgent", name: `${userId}--${sketch.id}` });
+  const { messages, sendMessage, status, stop, clearHistory, addToolOutput } = useAgentChat({
+    agent,
+    body: (): ChatBody => {
+      const { sketch, errors, lessonId } = latest.current;
+      return {
+        model: modelRef.current,
+        sketch: { title: sketch.title, code: sketch.code, values: sketch.values, seed: sketch.seed },
+        errors,
+        lessonId,
+      };
+    },
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.toolName === "set_params") {
+        const { values } = toolCall.input as { values: Record<string, unknown> };
+        latest.current.onSetParams(values);
+        addToolOutput({ toolCallId: toolCall.toolCallId, output: { applied: Object.keys(values) } });
+      }
+      // propose_edit waits for the user's Accept / Reject in the message list.
+    },
+  });
+
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const busy = status === "submitted" || status === "streaming";
+  const send = (text: string) => {
+    if (!text.trim() || busy) return;
+    sendMessage({ role: "user", parts: [{ type: "text", text }] });
+    setInput("");
+  };
+
+  return (
+    <div className="chat">
+      <div className="chat-head">
+        <select
+          aria-label="Model"
+          value={model}
+          onChange={(e) => {
+            setModel(e.target.value);
+            try { localStorage.setItem(MODEL_KEY, e.target.value); } catch { /* private mode */ }
+          }}
+        >
+          {CHAT_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        <button className="link" onClick={() => clearHistory()} disabled={!messages.length}>Clear</button>
+      </div>
+
+      <div className="chat-log" ref={scroller}>
+        {!messages.length && (
+          <div className="chat-empty">
+            <p>Ask about your sketch, request changes, or describe something new to generate.</p>
+            <div className="chips">
+              {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
+            </div>
+          </div>
+        )}
+        {messages.map((m) => (
+          <div key={m.id} className={`msg ${m.role}`}>
+            {m.parts.map((part, i) => {
+              if (part.type === "text") return <div key={i} className="md"><Markdown remarkPlugins={[remarkGfm]}>{part.text}</Markdown></div>;
+              if (!isToolUIPart(part)) return null;
+              const name = getToolName(part);
+              if (name === "propose_edit") {
+                const input = part.input as { code?: string; summary?: string } | undefined;
+                return (
+                  <ProposedEdit
+                    key={i}
+                    state={part.state}
+                    summary={input?.summary}
+                    code={input?.code}
+                    current={sketch.code}
+                    output={"output" in part ? (part.output as { accepted?: boolean }) : undefined}
+                    onDecide={(accepted) => {
+                      if (accepted && input?.code) props.onApplyCode(input.code);
+                      addToolOutput({ toolCallId: part.toolCallId, output: { accepted } });
+                    }}
+                  />
+                );
+              }
+              return (
+                <div key={i} className="tool-note">
+                  {name === "search_lessons" ? "📖 Looked through the lessons" : name === "set_params" ? "🎛 Adjusted parameters" : `⚙ ${name}`}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {status === "submitted" && <div className="msg assistant muted">Thinking…</div>}
+        {status === "error" && <div className="msg assistant error">Something went wrong. Try again, or pick another model.</div>}
+      </div>
+
+      <form
+        className="chat-input"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(input);
+        }}
+      >
+        <textarea
+          value={input}
+          rows={2}
+          placeholder="Ask or describe a change…"
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send(input);
+            }
+          }}
+        />
+        {busy ? <button type="button" onClick={() => stop()}>Stop</button> : <button type="submit" disabled={!input.trim()}>Send</button>}
+      </form>
+    </div>
+  );
+}
+
+function ProposedEdit(props: {
+  state: string;
+  summary?: string;
+  code?: string;
+  current: string;
+  output?: { accepted?: boolean };
+  onDecide(accepted: boolean): void;
+}) {
+  const { state, summary, code, current, output } = props;
+  const [open, setOpen] = useState(true);
+  if (state === "input-streaming") return <div className="tool-note">✏️ Writing a change…</div>;
+  const decided = state === "output-available";
+  const lines = code ? compact(diffLines(current, code)) : [];
+  const added = lines.filter((l) => l.kind === "add").length;
+  const removed = lines.filter((l) => l.kind === "del").length;
+  return (
+    <div className="proposal">
+      <button className="proposal-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>✏️ {summary ?? "Proposed change"}</span>
+        <span className="small"><span className="add">+{added}</span> <span className="del">−{removed}</span></span>
+      </button>
+      {open && (
+        <pre className="diff">
+          {lines.map((l, i) =>
+            l.kind === "gap" ? (
+              <div key={i} className="gap">⋯ {l.count} unchanged lines</div>
+            ) : (
+              <div key={i} className={l.kind}>{l.kind === "add" ? "+ " : l.kind === "del" ? "- " : "  "}{l.text}</div>
+            ),
+          )}
+        </pre>
+      )}
+      {decided ? (
+        <div className="small muted pad-s">{output?.accepted ? "Applied" : "Rejected"}</div>
+      ) : (
+        <div className="row pad-s">
+          <button className="primary" onClick={() => props.onDecide(true)}>Accept</button>
+          <button onClick={() => props.onDecide(false)}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
