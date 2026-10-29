@@ -5,7 +5,7 @@ import { getToolName, isToolUIPart } from "ai";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL, type ChatBody, type Sketch } from "../../shared/types";
-import { compact, diffLines } from "../lib/diff";
+import { DiffStats, DiffView, diffSummary } from "./DiffView";
 
 interface Props {
   userId: string;
@@ -197,26 +197,14 @@ function ProposedEdit(props: {
   const [open, setOpen] = useState(true);
   if (state === "input-streaming") return <div className="tool-note live">✏️ Writing a change…</div>;
   const decided = state === "output-available";
-  const lines = code ? compact(diffLines(current, code)) : [];
-  const added = lines.filter((l) => l.kind === "add").length;
-  const removed = lines.filter((l) => l.kind === "del").length;
+  const { lines, added, removed } = diffSummary(current, code ?? current);
   return (
     <div className="proposal">
       <button className="proposal-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span>✏️ {summary ?? "Proposed change"}</span>
-        <span className="small"><span className="add">+{added}</span> <span className="del">−{removed}</span></span>
+        <DiffStats added={added} removed={removed} />
       </button>
-      {open && (
-        <pre className="diff">
-          {lines.map((l, i) =>
-            l.kind === "gap" ? (
-              <div key={i} className="gap">⋯ {l.count} unchanged lines</div>
-            ) : (
-              <div key={i} className={l.kind}>{l.kind === "add" ? "+ " : l.kind === "del" ? "- " : "  "}{l.text}</div>
-            ),
-          )}
-        </pre>
-      )}
+      {open && <DiffView lines={lines} />}
       {decided ? (
         <div className="small muted pad-s">{output?.accepted ? "Applied" : "Rejected"}</div>
       ) : (

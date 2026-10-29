@@ -9,6 +9,7 @@ import { ParamsPanel } from "./ParamsPanel";
 import { SeedBar } from "./SeedBar";
 import { ChatPanel } from "./ChatPanel";
 import { Variations } from "./Variations";
+import { DiffStats, DiffView, diffSummary } from "./DiffView";
 
 export type StudioTab = "canvas" | "tweak" | "code" | "chat";
 type SideTab = "tweak" | "chat" | "saved";
@@ -268,12 +269,17 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
 }
 
 function ExportMenu({ disabled, onExport, onVersion }: { disabled: boolean; onExport(scale: number): void; onVersion(): void }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const pick = (fn: () => void) => () => {
+    if (menu.current) menu.current.open = false;
+    fn();
+  };
   return (
-    <details className="menu">
+    <details className="menu" ref={menu}>
       <summary aria-disabled={disabled}>Export ▾</summary>
       <div className="menu-list">
-        {[1, 2, 4].map((s) => <button key={s} disabled={disabled} onClick={() => onExport(s)}>PNG {s}×</button>)}
-        <button onClick={onVersion}>Save code version…</button>
+        {[1, 2, 4].map((s) => <button key={s} disabled={disabled} onClick={pick(() => onExport(s))}>PNG {s}×</button>)}
+        <button onClick={pick(onVersion)}>Save code version…</button>
       </div>
     </details>
   );
@@ -314,13 +320,45 @@ function Saved({ sketch, onRestore, onCode }: { sketch: Sketch; onRestore(p: Par
       {versions?.length === 0 && <p className="muted small">Use Export ▸ Save code version to snapshot your code.</p>}
       <ul className="versions">
         {versions?.map((v) => (
-          <li key={v.id}>
-            <span>{v.message || "Untitled version"}</span>
-            <span className="muted small">{new Date(v.createdAt).toLocaleString()}</span>
-            <button className="link" onClick={() => confirm("Replace the current code with this version?") && onCode(v.code)}>restore</button>
-          </li>
+          <VersionItem key={v.id} version={v} current={sketch.code} outputs={outputs?.filter((o) => o.code === v.code) ?? []} onRestore={() => onCode(v.code)} />
         ))}
       </ul>
     </div>
+  );
+}
+
+function VersionItem({ version, current, outputs, onRestore }: { version: Version; current: string; outputs: Output[]; onRestore(): void }) {
+  const [open, setOpen] = useState(false);
+  // Shows what restoring would do to the current code.
+  const diff = diffSummary(current, version.code);
+  const same = diff.added === 0 && diff.removed === 0;
+  return (
+    <li className="version">
+      <button className="version-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="version-title">
+          <span>{version.message || "Untitled version"}</span>
+          <span className="muted small">{new Date(version.createdAt).toLocaleString()}</span>
+        </span>
+        {same ? <span className="small muted">current</span> : <DiffStats added={diff.added} removed={diff.removed} />}
+      </button>
+      {open && (
+        <div className="version-body">
+          {outputs.length > 0 && (
+            <div className="thumbs">
+              {outputs.slice(0, 6).map((o) => <img key={o.id} className="thumb" src={o.url} alt={`Output with seed ${o.seed}`} loading="lazy" />)}
+            </div>
+          )}
+          {same ? (
+            <p className="small muted">Same as your current code.</p>
+          ) : (
+            <>
+              <p className="small muted">Restoring changes your current code like this:</p>
+              <DiffView lines={diff.lines} />
+              <button onClick={() => confirm("Replace the current code with this version?") && onRestore()}>Restore this version</button>
+            </>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
