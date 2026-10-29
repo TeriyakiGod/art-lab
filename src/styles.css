@@ -193,6 +193,12 @@ input[type="text"], textarea, .seed-input, .title-input {
 .md pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .md p { margin: 0.5em 0; }
 .tool-note { font-size: 0.85rem; color: var(--muted); }
+.live { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .live { animation: none; } }
+.reasoning { font-size: 0.85rem; color: var(--muted); }
+.reasoning summary { cursor: pointer; }
+.reasoning-text { white-space: pre-wrap; margin: 6px 0 0; padding-left: 10px; border-left: 2px solid var(--line); max-height: 240px; overflow-y: auto; }
 .proposal { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); margin: 6px 0; }
 .proposal-head { width: 100%; justify-content: space-between; border: none; border-radius: 0; background: var(--panel-2); text-align: left; }
 .diff { margin: 0; max-height: 320px; overflow: auto; font: 12px/1.45 var(--mono); padding: 6px 0; }

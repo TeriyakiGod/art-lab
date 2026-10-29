@@ -64,6 +64,16 @@ export function ChatPanel(props: Props) {
   }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";
+  // Keep an indicator up until something on screen shows progress; otherwise
+  // the gaps (before the first token, between steps) look like a stall.
+  const last = messages.at(-1);
+  const tail = last?.role === "assistant" ? last.parts.findLast((p) => p.type !== "step-start") : undefined;
+  const tailLive =
+    !!tail &&
+    ((tail.type === "text" && !!tail.text.trim()) ||
+      (tail.type === "reasoning" && tail.state === "streaming" && !!tail.text.trim()) ||
+      (isToolUIPart(tail) && (tail.state === "input-streaming" || tail.state === "input-available")));
+  const working = busy && !tailLive;
   const send = (text: string) => {
     if (!text.trim() || busy) return;
     sendMessage({ role: "user", parts: [{ type: "text", text }] });
@@ -99,8 +109,10 @@ export function ChatPanel(props: Props) {
           <div key={m.id} className={`msg ${m.role}`}>
             {m.parts.map((part, i) => {
               if (part.type === "text") return <div key={i} className="md"><Markdown remarkPlugins={[remarkGfm]}>{part.text}</Markdown></div>;
+              if (part.type === "reasoning") return part.text.trim() ? <Reasoning key={i} text={part.text} live={part.state === "streaming"} /> : null;
               if (!isToolUIPart(part)) return null;
               const name = getToolName(part);
+              const pending = part.state === "input-streaming" || part.state === "input-available";
               if (name === "propose_edit") {
                 const input = part.input as { code?: string; summary?: string } | undefined;
                 return (
@@ -119,14 +131,18 @@ export function ChatPanel(props: Props) {
                 );
               }
               return (
-                <div key={i} className="tool-note">
-                  {name === "search_lessons" ? "📖 Looked through the lessons" : name === "set_params" ? "🎛 Adjusted parameters" : `⚙ ${name}`}
+                <div key={i} className={`tool-note${pending ? " live" : ""}`}>
+                  {name === "search_lessons"
+                    ? pending ? "📖 Looking through the lessons…" : "📖 Looked through the lessons"
+                    : name === "set_params"
+                      ? pending ? "🎛 Adjusting parameters…" : "🎛 Adjusted parameters"
+                      : `⚙ ${name}`}
                 </div>
               );
             })}
           </div>
         ))}
-        {status === "submitted" && <div className="msg assistant muted">Thinking…</div>}
+        {working && <div className="msg assistant muted live">Thinking…</div>}
         {status === "error" && <div className="msg assistant error">Something went wrong. Try again, or pick another model.</div>}
       </div>
 
@@ -155,6 +171,16 @@ export function ChatPanel(props: Props) {
   );
 }
 
+/** The model's reasoning: collapsed by default, with a pulsing label while it streams. */
+function Reasoning({ text, live }: { text: string; live: boolean }) {
+  return (
+    <details className="reasoning">
+      <summary className={live ? "live" : undefined}>{live ? "Thinking…" : "Thought it through"}</summary>
+      <div className="reasoning-text">{text}</div>
+    </details>
+  );
+}
+
 function ProposedEdit(props: {
   state: string;
   summary?: string;
@@ -165,7 +191,7 @@ function ProposedEdit(props: {
 }) {
   const { state, summary, code, current, output } = props;
   const [open, setOpen] = useState(true);
-  if (state === "input-streaming") return <div className="tool-note">✏️ Writing a change…</div>;
+  if (state === "input-streaming") return <div className="tool-note live">✏️ Writing a change…</div>;
   const decided = state === "output-available";
   const lines = code ? compact(diffLines(current, code)) : [];
   const added = lines.filter((l) => l.kind === "add").length;
