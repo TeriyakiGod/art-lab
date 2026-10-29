@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ENGINES, type Engine, type Output, type Sketch, type Version } from "../../shared/types";
+import { ENGINES, generateKey, type Engine, type Output, type Sketch, type Version } from "../../shared/types";
 import { SketchFrame, renderToPNG, type SketchFrameHandle } from "../runtime/SketchFrame";
 import { SINGLE_CANVAS_PIXELS, renderLargePNG } from "../runtime/bigExport";
 import type { ParamSpec } from "../runtime/sandbox";
@@ -23,9 +23,10 @@ interface Props {
   userId: string;
   desktop: boolean;
   tab: StudioTab;
+  onTab(tab: StudioTab): void;
 }
 
-export function Studio({ sketchId, userId, desktop, tab }: Props) {
+export function Studio({ sketchId, userId, desktop, tab, onTab }: Props) {
   const [sketch, setSketch] = useState<Sketch | null>(null);
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -40,10 +41,10 @@ export function Studio({ sketchId, userId, desktop, tab }: Props) {
 
   if (missing) return <div className="pad"><p>This sketch doesn't exist on this device.</p><a href="#/">Back to sketches</a></div>;
   if (!sketch) return <div className="pad muted">Loading…</div>;
-  return <StudioInner key={sketch.id} initial={sketch} userId={userId} desktop={desktop} tab={tab} />;
+  return <StudioInner key={sketch.id} initial={sketch} userId={userId} desktop={desktop} tab={tab} onTab={onTab} />;
 }
 
-function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userId: string; desktop: boolean; tab: StudioTab }) {
+function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch; userId: string; desktop: boolean; tab: StudioTab; onTab(t: StudioTab): void }) {
   const [sketch, setSketchState] = useState(initial);
   const [draft, setDraft] = useState(initial.code);
   const [specs, setSpecs] = useState<Record<string, ParamSpec>>({});
@@ -55,6 +56,16 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showVariations, setShowVariations] = useState(false);
+  // A description handed over from Home's "generate": show the assistant and let it write the sketch.
+  const [generatePrompt] = useState(() => {
+    try { return sessionStorage.getItem(generateKey(initial.id)) ?? undefined; } catch { return undefined; }
+  });
+  useEffect(() => {
+    if (!generatePrompt) return;
+    try { sessionStorage.removeItem(generateKey(initial.id)); } catch { /* ignore */ }
+    setSide("chat");
+    onTab("chat");
+  }, [generatePrompt, onTab, initial.id]);
   const frame = useRef<SketchFrameHandle>(null);
 
   // Slider drags fire many changes; re-run the sketch at most every ~80 ms.
@@ -106,9 +117,9 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
     update({ seed: prev });
   };
 
-  const applyCode = (code: string) => {
+  const applyCode = (code: string, engine?: Engine) => {
     setDraft(code);
-    update({ code });
+    update(engine ? { code, engine } : { code });
   };
 
   const exportPNG = async (scale: number) => {
@@ -195,6 +206,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
       sketch={sketch}
       errors={errors}
       onApplyCode={applyCode}
+      generatePrompt={generatePrompt}
       onSetParams={(values) => update({ values: { ...sketch.values, ...values } })}
       capture={async () => {
         const blob = await frame.current!.capture(640, "image/jpeg");

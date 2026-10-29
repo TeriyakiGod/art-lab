@@ -44,6 +44,7 @@ Match the current sketch's engine unless the user asks to switch.
 ## Tools
 - propose_edit: to change or create code, call it with the COMPLETE new sketch source and a one-line summary.
   The user reviews a diff and accepts or rejects it. Never paste whole sketches in chat instead.
+- create_sketch: for a brand-new sketch from a description, keeping the current one. Write a complete, working sketch.
 - set_params: to try new parameter values without changing code.
 - search_lessons: find the relevant part of the built-in course, then point the user to it by lesson title.
 
@@ -63,6 +64,11 @@ export class ChatAgent extends AIChatAgent<Env> {
     }
     if (body.errors?.length) context += `\n\nRecent sketch errors:\n${body.errors.slice(-5).join("\n").slice(0, 2000)}`;
     if (body.lessonId) context += `\n\nThe user is currently reading lesson ${body.lessonId}.`;
+    if (body.generate) {
+      context += "\n\nThe user just created this sketch from the description in their message; its code is only a placeholder. "
+        + "Write a complete, working sketch for the idea from scratch (canvas unless they ask for p5), with 3-6 well-chosen params and seeded randomness, "
+        + "and call propose_edit with it: it is applied automatically. Then say in two or three sentences what it does and which sliders to try first.";
+    }
     const vision = modelSees(modelId);
     context += vision
       ? `\n\nYou can see the canvas: call ${LOOK_TOOL} when the user asks how the sketch looks, or to check your change after the user accepts it. Describe what you actually see.`
@@ -79,6 +85,15 @@ export class ChatAgent extends AIChatAgent<Env> {
           inputSchema: z.object({
             summary: z.string().describe("One line describing the change"),
             code: z.string().describe("The complete new sketch source"),
+            engine: z.enum(["canvas", "p5"]).optional().describe("Only when switching what the code is written for"),
+          }),
+        }),
+        create_sketch: tool({
+          description: "Create a separate new sketch (the current one is untouched). Use it when the user asks for a new or different sketch.",
+          inputSchema: z.object({
+            title: z.string().describe("Short title"),
+            code: z.string().describe("The complete sketch source"),
+            engine: z.enum(["canvas", "p5"]).optional().describe("Defaults to canvas"),
           }),
         }),
         set_params: tool({

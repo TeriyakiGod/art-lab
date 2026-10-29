@@ -78,7 +78,7 @@ export function App() {
   let page;
   if (authError && !user) page = <div className="pad"><p>Couldn't verify your sign-in.</p><button onClick={() => location.reload()}>Retry</button></div>;
   else if (!user) page = <div className="pad muted">Loading…</div>;
-  else if (inStudio) page = <Studio sketchId={param} userId={user.id} desktop={desktop} tab={tab} />;
+  else if (inStudio) page = <Studio sketchId={param} userId={user.id} desktop={desktop} tab={tab} onTab={setTab} />;
   else if (route === "learn" && param) page = <LessonPage id={param} done={done} onComplete={completeLesson} />;
   else if (route === "learn") page = <LessonList done={done} />;
   else if (route === "gallery") page = <Gallery />;

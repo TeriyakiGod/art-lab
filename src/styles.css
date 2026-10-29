@@ -250,6 +250,9 @@ body.resizing iframe { pointer-events: none; }
 .md pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .md p { margin: 0.5em 0; }
 .tool-note { font-size: 0.85rem; color: var(--muted); }
+.generate { display: flex; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+.generate textarea { flex: 1; resize: vertical; min-height: 44px; }
+.new-sketch { margin: 6px 0; min-height: 0; }
 .chat-image { display: block; max-width: min(220px, 100%); border-radius: 8px; border: 1px solid var(--line); margin-top: 6px; }
 .attach.on { color: var(--accent); border-color: var(--accent); }
 .live { animation: pulse 1.4s ease-in-out infinite; }
@@ -260,6 +263,7 @@ body.resizing iframe { pointer-events: none; }
 .reasoning-text { white-space: pre-wrap; margin: 6px 0 0; padding-left: 10px; border-left: 2px solid var(--line); max-height: 240px; overflow-y: auto; }
 .proposal { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); margin: 6px 0; }
 .proposal-head { width: 100%; justify-content: space-between; border: none; border-radius: 0; background: var(--panel-2); text-align: left; }
+.proposal-head.static { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-height: 36px; }
 .diff { margin: 0; max-height: 320px; overflow: auto; font: 12px/1.45 var(--mono); padding: 6px 0; }
 .diff > div { padding: 0 10px; white-space: pre-wrap; word-break: break-word; }
 .diff .add, .add { color: var(--add); }

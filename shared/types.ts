@@ -68,4 +68,10 @@ export type ChatBody = {
   sketch?: { title: string; code: string; engine?: Engine; values: Record<string, unknown>; seed: string };
   errors?: string[];
   lessonId?: string;
+  /** The sketch was just created from a description on Home: write it from scratch. */
+  generate?: boolean;
 };
+
+/** Code of a sketch created from a description, until the assistant replaces it. */
+export const GENERATE_PLACEHOLDER = "// The assistant is writing this sketch from your description…\n";
+export const generateKey = (sketchId: string) => `art-lab:generate:${sketchId}`;

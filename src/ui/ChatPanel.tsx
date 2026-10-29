@@ -4,7 +4,8 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart } from "ai";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, modelSees, type ChatBody, type Sketch } from "../../shared/types";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, GENERATE_PLACEHOLDER, modelSees, type ChatBody, type Engine, type Sketch } from "../../shared/types";
+import { createSketch } from "../lib/create";
 import { LOOK_TOOL } from "../../shared/chatImages";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 
@@ -13,7 +14,9 @@ interface Props {
   sketch: Sketch;
   errors: string[];
   lessonId?: string;
-  onApplyCode(code: string): void;
+  onApplyCode(code: string, engine?: Engine): void;
+  /** A description from Home to generate this sketch from; sent once when the chat connects. */
+  generatePrompt?: string;
   onSetParams(values: Record<string, unknown>): void;
   /** A small JPEG data URL of the canvas as drawn right now. */
   capture(): Promise<string>;
@@ -43,6 +46,8 @@ export function ChatPanel(props: Props) {
   latest.current = props;
   const modelRef = useRef(model);
   modelRef.current = model;
+  // True from the Home "generate" message until its code is applied.
+  const generating = useRef(false);
 
   // One conversation per sketch; the server only lets a user reach agents prefixed with their id.
   const agent = useAgent({ agent: "ChatAgent", name: `${userId}--${sketch.id}` });
@@ -55,6 +60,7 @@ export function ChatPanel(props: Props) {
         sketch: { title: sketch.title, code: sketch.code, engine: sketch.engine ?? "canvas", values: sketch.values, seed: sketch.seed },
         errors,
         lessonId,
+        generate: generating.current || undefined,
       };
     },
     onToolCall: async ({ toolCall }) => {
@@ -70,9 +76,40 @@ export function ChatPanel(props: Props) {
           addToolOutput({ toolCallId: toolCall.toolCallId, output: { error: `Couldn't capture the canvas: ${(e as Error).message}` } });
         }
       }
-      // propose_edit waits for the user's Accept / Reject in the message list.
+      if (toolCall.toolName === "propose_edit" && latest.current.sketch.code === GENERATE_PLACEHOLDER) {
+        // Nothing to lose yet: a freshly generated sketch is applied without asking.
+        const { code, engine } = toolCall.input as { code: string; engine?: Engine };
+        latest.current.onApplyCode(code, engine);
+        generating.current = false;
+        addToolOutput({ toolCallId: toolCall.toolCallId, output: { accepted: true } });
+      }
+      if (toolCall.toolName === "create_sketch") {
+        const { title, code, engine } = toolCall.input as { title: string; code: string; engine?: Engine };
+        const s = await createSketch({ title, code, engine }, false);
+        addToolOutput({ toolCallId: toolCall.toolCallId, output: { created: s.id, title: s.title } });
+      }
+      // Other propose_edit calls wait for the user's Accept / Reject in the message list.
     },
   });
+
+  // Home's "generate" hands over a description: send it once the socket is open.
+  const sentPrompt = useRef(false);
+  useEffect(() => {
+    const prompt = props.generatePrompt;
+    if (!prompt) return;
+    const go = () => {
+      if (sentPrompt.current) return;
+      sentPrompt.current = true;
+      generating.current = true;
+      sendMessage({ role: "user", parts: [{ type: "text", text: prompt }] });
+    };
+    if (agent.readyState === WebSocket.OPEN) go();
+    else {
+      agent.addEventListener("open", go, { once: true });
+      return () => agent.removeEventListener("open", go);
+    }
+    // Only for the prompt this panel was opened with.
+  }, [props.generatePrompt]);
 
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -146,6 +183,15 @@ export function ChatPanel(props: Props) {
                   </div>
                 );
               }
+              if (name === "create_sketch") {
+                const out = "output" in part ? (part.output as { created?: string; title?: string } | undefined) : undefined;
+                return out?.created ? (
+                  <a key={i} className="card new-sketch" href={`#/sketch/${out.created}`}>
+                    <span className="small muted">New sketch</span>
+                    <strong>{out.title} →</strong>
+                  </a>
+                ) : <div key={i} className="tool-note live">✨ Creating a new sketch…</div>;
+              }
               if (name === "propose_edit") {
                 const input = part.input as { code?: string; summary?: string } | undefined;
                 return (
@@ -157,7 +203,7 @@ export function ChatPanel(props: Props) {
                     current={sketch.code}
                     output={"output" in part ? (part.output as { accepted?: boolean }) : undefined}
                     onDecide={(accepted) => {
-                      if (accepted && input?.code) props.onApplyCode(input.code);
+                      if (accepted && input?.code) props.onApplyCode(input.code, (input as { engine?: Engine }).engine);
                       addToolOutput({ toolCallId: part.toolCallId, output: { accepted } });
                     }}
                   />
@@ -238,6 +284,17 @@ function ProposedEdit(props: {
   const [open, setOpen] = useState(true);
   if (state === "input-streaming") return <div className="tool-note live">✏️ Writing a change…</div>;
   const decided = state === "output-available";
+  // Once decided, the diff against today's code means nothing, so only the outcome is shown.
+  if (decided) {
+    return (
+      <div className="proposal">
+        <div className="proposal-head static">
+          <span>✏️ {summary ?? "Proposed change"}</span>
+          <span className="small muted">{output?.accepted ? "Applied" : "Rejected"}</span>
+        </div>
+      </div>
+    );
+  }
   const { lines, added, removed } = diffSummary(current, code ?? current);
   return (
     <div className="proposal">
@@ -246,14 +303,10 @@ function ProposedEdit(props: {
         <DiffStats added={added} removed={removed} />
       </button>
       {open && <DiffView lines={lines} />}
-      {decided ? (
-        <div className="small muted pad-s">{output?.accepted ? "Applied" : "Rejected"}</div>
-      ) : (
-        <div className="row pad-s">
-          <button className="primary" onClick={() => props.onDecide(true)}>Accept</button>
-          <button onClick={() => props.onDecide(false)}>Reject</button>
-        </div>
-      )}
+      <div className="row pad-s">
+        <button className="primary" onClick={() => props.onDecide(true)}>Accept</button>
+        <button onClick={() => props.onDecide(false)}>Reject</button>
+      </div>
     </div>
   );
 }
