@@ -53,7 +53,11 @@ jobs:
       # Idempotent: creates the D1 database and R2 bucket on the first run, reuses them after.
       - name: Provision D1 and R2
         run: |
-          d1_id() { npx wrangler d1 list --json | jq -r '.[] | select(.name == "art-lab") | .uuid'; }
+          d1_id() {
+            local out
+            out=$(npx wrangler d1 list --json) || { echo "::error::Listing D1 databases failed. Does the API token have Account → D1 → Edit?"; return 1; }
+            jq -r '.[] | select(.name == "art-lab") | .uuid' <<<"$out"
+          }
           id=$(d1_id)
           if [ -z "$id" ]; then npx wrangler d1 create art-lab; id=$(d1_id); fi
           [ -n "$id" ] || { echo "::error::could not find or create the art-lab D1 database"; exit 1; }
