@@ -26,7 +26,7 @@
   "vars": {
     "ACCESS_TEAM_DOMAIN": "teriyakigod.cloudflareaccess.com",
     "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD",
-    "AI_GATEWAY_ID": ""
+    "AI_GATEWAY_ID": "default"
   },
   "observability": { "enabled": true }
 }
