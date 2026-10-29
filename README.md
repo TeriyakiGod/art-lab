@@ -49,6 +49,23 @@ npm run db:migrate:remote
 2. Optional: create an AI Gateway and put its id in `AI_GATEWAY_ID` (logging, caching, rate limits).
 3. `npm run deploy`. The custom domain route creates the DNS record for `art.kacperochnik.eu`.
 
+## Deploying from GitHub
+
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) builds every pull request and
+deploys every push to `main` (or a manual run from the Actions tab). The deploy job creates the
+D1 database and R2 bucket on its first run if they don't exist, applies migrations, then runs
+`wrangler deploy`. The committed `wrangler.jsonc` keeps its placeholders; the job fills them in.
+
+Repository settings → Secrets and variables → Actions:
+
+| Name | Kind | Value |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | secret | Account API token from the **Edit Cloudflare Workers** template, plus **Account → D1 → Edit**, scoped to your account and the `kacperochnik.eu` zone |
+| `CLOUDFLARE_ACCOUNT_ID` | secret | Your account id |
+| `ACCESS_AUD` | variable | The Access application's AUD tag (step 1 above) |
+
+The deploy fails early with a clear message if any of these are missing.
+
 The GLM 5.3 Flash and Kimi K2.7 models need the Workers Paid plan; GLM 4.7 Flash works on Free
 and is the automatic fallback.
 
