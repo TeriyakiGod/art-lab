@@ -5,6 +5,7 @@ import { LESSONS } from "../../shared/lessons";
 import { SketchFrame } from "../runtime/SketchFrame";
 import { randomSeed } from "../lib/store";
 import { createSketch } from "../lib/create";
+import { startChallenge } from "../lib/challenge";
 import { Editor } from "./Editor";
 
 export function LessonList({ done }: { done: Set<string> }) {
@@ -64,6 +65,13 @@ export function LessonPage({ id, done, onComplete }: { id: string; done: Set<str
       <a href="#/learn" className="small">← All lessons</a>
       <h1>{lesson.title}</h1>
       <Markdown components={components} remarkPlugins={[remarkGfm]}>{lesson.body}</Markdown>
+      {lesson.challenge && (
+        <div className="card challenge-cta">
+          <strong>Ready for the challenge?</strong>
+          <span className="small muted">Opens a starter sketch. If you get stuck, the assistant gives a nudge first, then a hint, and the solution only if you ask.</span>
+          <button className="primary" onClick={() => void startChallenge(lesson.id)}>Start the challenge in the studio</button>
+        </div>
+      )}
       <div className="lesson-foot">
         {done.has(lesson.id) ? <span className="muted">✓ Completed</span> : <button className="primary" onClick={() => onComplete(lesson.id)}>Mark as done</button>}
         {next && <a className="button" href={`#/learn/${next.id}`}>Next: {next.title} →</a>}

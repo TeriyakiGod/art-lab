@@ -109,4 +109,4 @@ Open this example in the studio (**Open in studio ↗**) and drag the *Rings* sl
 
 Make a sketch with **a row of squares across the middle** that get bigger from left to right. Add a parameter for how many squares there are.
 
-*Stuck?* Open the studio's Assistant and ask: "Give me a hint for the lesson 1 challenge, but don't solve it."
+*Stuck?* Press **Start the challenge in the studio** below: the assistant there gives a nudge first, and the solution only if you ask.

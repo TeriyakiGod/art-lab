@@ -13,6 +13,7 @@ import { Variations } from "./Variations";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 import { PalettePanel } from "./PalettePanel";
 import { useStageGestures } from "./useStageGestures";
+import { getChallenge } from "../lib/challenge";
 import { PALETTE_KEY } from "../../shared/palettes";
 
 export type StudioTab = "canvas" | "tweak" | "code" | "chat";
@@ -56,6 +57,7 @@ function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showVariations, setShowVariations] = useState(false);
+  const [challenge] = useState(() => getChallenge(initial.id));
   // A description handed over from Home's "generate": show the assistant and let it write the sketch.
   const [generatePrompt] = useState(() => {
     try { return sessionStorage.getItem(generateKey(initial.id)) ?? undefined; } catch { return undefined; }
@@ -207,6 +209,7 @@ function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch
       errors={errors}
       onApplyCode={applyCode}
       generatePrompt={generatePrompt}
+      challenge={challenge}
       onSetParams={(values) => update({ values: { ...sketch.values, ...values } })}
       capture={async () => {
         const blob = await frame.current!.capture(640, "image/jpeg");

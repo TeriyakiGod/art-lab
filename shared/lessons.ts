@@ -3,6 +3,8 @@ export interface Lesson {
   title: string;
   summary: string;
   body: string;
+  /** The text of the lesson's "## Challenge" section, if it has one. */
+  challenge?: string;
 }
 
 const files = import.meta.glob("./lessons/*.md", { query: "?raw", import: "default", eager: true }) as Record<
@@ -19,7 +21,10 @@ function parse(path: string, raw: string): Lesson {
     const i = line.indexOf(":");
     if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
   }
-  return { id, title: meta.title ?? id, summary: meta.summary ?? "", body: m ? raw.slice(m[0].length) : raw };
+  const body = m ? raw.slice(m[0].length) : raw;
+  const challenge = body.match(/\n## Challenge\n([\s\S]*?)(?=\n## |$)/)?.[1]
+    .split("\n").filter((l) => !l.startsWith("*Stuck?*")).join("\n").trim();
+  return { id, title: meta.title ?? id, summary: meta.summary ?? "", body, challenge: challenge || undefined };
 }
 
 export const LESSONS: Lesson[] = Object.entries(files)

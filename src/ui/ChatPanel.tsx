@@ -4,8 +4,10 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart } from "ai";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, GENERATE_PLACEHOLDER, modelSees, type ChatBody, type Engine, type Sketch } from "../../shared/types";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, GENERATE_PLACEHOLDER, modelSees, type ChatBody, type Engine, type HintLevel, type Sketch } from "../../shared/types";
 import { createSketch } from "../lib/create";
+import { nextHint, setHintsUsed } from "../lib/challenge";
+import { LESSONS } from "../../shared/lessons";
 import { LOOK_TOOL } from "../../shared/chatImages";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 
@@ -17,6 +19,8 @@ interface Props {
   onApplyCode(code: string, engine?: Engine): void;
   /** A description from Home to generate this sketch from; sent once when the chat connects. */
   generatePrompt?: string;
+  /** Set when this sketch is an attempt at a lesson challenge. */
+  challenge?: { lessonId: string; hints: number } | null;
   onSetParams(values: Record<string, unknown>): void;
   /** A small JPEG data URL of the canvas as drawn right now. */
   capture(): Promise<string>;
@@ -48,6 +52,10 @@ export function ChatPanel(props: Props) {
   modelRef.current = model;
   // True from the Home "generate" message until its code is applied.
   const generating = useRef(false);
+  // The hint rung the next request asks for (only for the hint button's own message).
+  const hintAsk = useRef<HintLevel | undefined>(undefined);
+  const [hintsUsed, setHintsUsedState] = useState(props.challenge?.hints ?? 0);
+  const challengeLesson = props.challenge ? LESSONS.find((l) => l.id === props.challenge!.lessonId) : undefined;
 
   // One conversation per sketch; the server only lets a user reach agents prefixed with their id.
   const agent = useAgent({ agent: "ChatAgent", name: `${userId}--${sketch.id}` });
@@ -61,6 +69,7 @@ export function ChatPanel(props: Props) {
         errors,
         lessonId,
         generate: generating.current || undefined,
+        challenge: latest.current.challenge ? { lessonId: latest.current.challenge.lessonId, hint: hintAsk.current } : undefined,
       };
     },
     onToolCall: async ({ toolCall }) => {
@@ -117,6 +126,18 @@ export function ChatPanel(props: Props) {
   }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";
+  useEffect(() => {
+    if (!busy) hintAsk.current = undefined;
+  }, [busy]);
+  const askHint = () => {
+    if (busy || !props.challenge) return;
+    const level = nextHint(hintsUsed);
+    hintAsk.current = level;
+    setHintsUsedState(level);
+    setHintsUsed(sketch.id, props.challenge.lessonId, level);
+    const ask = level === 1 ? "I'm stuck. Can you give me a small nudge?" : level === 2 ? "I'm still stuck. Can I have a more concrete hint?" : "Please show me a solution and explain it.";
+    sendMessage({ role: "user", parts: [{ type: "text", text: ask }] });
+  };
   // Keep an indicator up until something on screen shows progress; otherwise
   // the gaps (before the first token, between steps) look like a stall.
   const last = messages.at(-1);
@@ -156,6 +177,17 @@ export function ChatPanel(props: Props) {
         <button className="link" onClick={() => clearHistory()} disabled={!messages.length}>Clear</button>
       </div>
 
+      {challengeLesson?.challenge && (
+        <details className="challenge-banner">
+          <summary>
+            <span>Challenge · {challengeLesson.title}</span>
+            <button className="chip" disabled={busy} onClick={(e) => { e.preventDefault(); askHint(); }}>
+              {hintsUsed === 0 ? "Stuck? Get a nudge" : hintsUsed === 1 ? "Another hint" : "Show a solution"}
+            </button>
+          </summary>
+          <div className="small md"><Markdown remarkPlugins={[remarkGfm]}>{challengeLesson.challenge}</Markdown></div>
+        </details>
+      )}
       <div className="chat-log" ref={scroller}>
         {!messages.length && (
           <div className="chat-empty">

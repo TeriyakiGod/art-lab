@@ -69,6 +69,15 @@ export class ChatAgent extends AIChatAgent<Env> {
         + "Write a complete, working sketch for the idea from scratch (canvas unless they ask for p5), with 3-6 well-chosen params and seeded randomness, "
         + "and call propose_edit with it: it is applied automatically. Then say in two or three sentences what it does and which sliders to try first.";
     }
+    const lesson = body.challenge && LESSONS.find((l) => l.id === body.challenge!.lessonId);
+    if (lesson?.challenge) {
+      const level = body.challenge!.hint;
+      context += `\n\nThe user is working on the challenge from lesson "${lesson.title}":\n${lesson.challenge}\n`
+        + "Coach, don't solve: the point is that they figure it out. Follow a hint ladder and never give more than asked. "
+        + "Rung 1, a nudge: a question or pointer to the idea, no code. Rung 2, a hint: name the technique and show at most 2-3 lines. "
+        + "Rung 3, a solution: a complete working version via propose_edit, explained step by step. "
+        + (level ? `This message asks for rung ${level}.` : "If they ask for help in their own words, start at rung 1; give a solution only when they explicitly ask for one.");
+    }
     const vision = modelSees(modelId);
     context += vision
       ? `\n\nYou can see the canvas: call ${LOOK_TOOL} when the user asks how the sketch looks, or to check your change after the user accepts it. Describe what you actually see.`

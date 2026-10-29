@@ -70,7 +70,12 @@ export type ChatBody = {
   lessonId?: string;
   /** The sketch was just created from a description on Home: write it from scratch. */
   generate?: boolean;
+  /** The sketch is an attempt at a lesson challenge; `hint` is the rung of help asked for. */
+  challenge?: { lessonId: string; hint?: HintLevel };
 };
+
+/** 1: a nudge, 2: a concrete hint, 3: a worked solution. */
+export type HintLevel = 1 | 2 | 3;
 
 /** Code of a sketch created from a description, until the assistant replaces it. */
 export const GENERATE_PLACEHOLDER = "// The assistant is writing this sketch from your description…\n";
