@@ -1,11 +1,11 @@
 import { useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { LESSONS } from "../../shared/lessons";
+import { LESSONS, type Lesson } from "../../shared/lessons";
 import { SketchFrame } from "../runtime/SketchFrame";
 import { randomSeed } from "../lib/store";
 import { createSketch } from "../lib/create";
-import { startChallenge } from "../lib/challenge";
+import { linkLesson, startChallenge } from "../lib/challenge";
 import { Editor } from "./Editor";
 
 export function LessonList({ done }: { done: Set<string> }) {
@@ -44,27 +44,11 @@ export function LessonPage({ id, done, onComplete }: { id: string; done: Set<str
   if (!lesson) return <div className="pad">Lesson not found. <a href="#/learn">All lessons</a></div>;
   const next = LESSONS[idx + 1];
 
-  const components: Components = {
-    pre({ node, children }) {
-      const code = node?.children[0];
-      const cls = code && code.type === "element" ? (code.properties.className as string[] | undefined) : undefined;
-      if (code?.type === "element" && cls?.includes("language-sketch")) {
-        const text = code.children.map((c) => (c.type === "text" ? c.value : "")).join("");
-        return <LiveExample code={text.trimEnd() + "\n"} title={lesson.title} />;
-      }
-      return <pre>{children}</pre>;
-    },
-    a({ href, children }) {
-      const external = href && /^https?:/.test(href);
-      return <a href={href} {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>{children}</a>;
-    },
-  };
-
   return (
     <article className="lesson">
       <a href="#/learn" className="small">← All lessons</a>
       <h1>{lesson.title}</h1>
-      <Markdown components={components} remarkPlugins={[remarkGfm]}>{lesson.body}</Markdown>
+      <LessonBody lesson={lesson} />
       {lesson.challenge && (
         <div className="card challenge-cta">
           <strong>Ready for the challenge?</strong>
@@ -80,7 +64,31 @@ export function LessonPage({ id, done, onComplete }: { id: string; done: Set<str
   );
 }
 
-function LiveExample({ code: initial, title }: { code: string; title: string }) {
+/**
+ * A lesson's text with its ```sketch blocks turned into live examples. In the
+ * studio's lesson panel, `onUseCode` copies an example into the editor instead
+ * of opening a new sketch.
+ */
+export function LessonBody({ lesson, onUseCode }: { lesson: Lesson; onUseCode?(code: string): void }) {
+  const components: Components = {
+    pre({ node, children }) {
+      const code = node?.children[0];
+      const cls = code && code.type === "element" ? (code.properties.className as string[] | undefined) : undefined;
+      if (code?.type === "element" && cls?.includes("language-sketch")) {
+        const text = code.children.map((c) => (c.type === "text" ? c.value : "")).join("");
+        return <LiveExample code={text.trimEnd() + "\n"} lesson={lesson} onUse={onUseCode} />;
+      }
+      return <pre>{children}</pre>;
+    },
+    a({ href, children }) {
+      const external = href && /^https?:/.test(href);
+      return <a href={href} {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>{children}</a>;
+    },
+  };
+  return <Markdown components={components} remarkPlugins={[remarkGfm]}>{lesson.body}</Markdown>;
+}
+
+function LiveExample({ code: initial, lesson, onUse }: { code: string; lesson: Lesson; onUse?(code: string): void }) {
   const [code, setCode] = useState(initial);
   const [running, setRunning] = useState(initial);
   const [seed, setSeed] = useState("lesson");
@@ -98,9 +106,20 @@ function LiveExample({ code: initial, title }: { code: string; title: string }) 
         <button onClick={() => setEditing(!editing)}>{editing ? "Hide code" : "Edit code"}</button>
         {code !== running && <button className="primary" onClick={() => setRunning(code)}>Run ▶</button>}
         {code !== initial && <button className="link" onClick={() => { setCode(initial); setRunning(initial); }}>reset</button>}
-        <button className="link" onClick={() => void createSketch({ title: `${title} example`, code })}>Open in studio ↗</button>
+        {onUse ? (
+          <button className="link" onClick={() => onUse(code)}>Use this code</button>
+        ) : (
+          <button className="link" onClick={() => void openExample(lesson, code)}>Open in studio ↗</button>
+        )}
       </div>
       {editing && <div className="example-editor"><Editor value={code} onChange={setCode} /></div>}
     </div>
   );
+}
+
+/** Opens a lesson example as a new sketch that remembers its lesson (shown in the studio's Lesson tab). */
+async function openExample(lesson: Lesson, code: string) {
+  const s = await createSketch({ title: `${lesson.title.replace(/^\d+\.\s*/, "")} example`, code }, false);
+  linkLesson(s.id, lesson.id);
+  location.hash = `#/sketch/${s.id}`;
 }

@@ -78,7 +78,7 @@ export function App() {
   let page;
   if (authError && !user) page = <div className="pad"><p>Couldn't verify your sign-in.</p><button onClick={() => location.reload()}>Retry</button></div>;
   else if (!user) page = <div className="pad muted">Loading…</div>;
-  else if (inStudio) page = <Studio sketchId={param} userId={user.id} desktop={desktop} tab={tab} onTab={setTab} />;
+  else if (inStudio) page = <Studio sketchId={param} userId={user.id} desktop={desktop} tab={tab} onTab={setTab} done={done} onComplete={completeLesson} />;
   else if (route === "learn" && param) page = <LessonPage id={param} done={done} onComplete={completeLesson} />;
   else if (route === "learn") page = <LessonList done={done} />;
   else if (route === "gallery") page = <Gallery />;
@@ -98,10 +98,10 @@ export function App() {
       <main className="main">{page}</main>
       {!desktop && inStudio && (
         <nav className="bottomnav" aria-label="Studio views">
-          {(["canvas", "tweak", "code", "chat"] as const).map((t) => (
+          {(["canvas", "tweak", "code", "lesson", "chat"] as const).map((t) => (
             <button key={t} className={tab === t ? "on" : ""} aria-current={tab === t} onClick={() => setTab(t)}>
               <NavIcon tab={t} />
-              {t === "canvas" ? "Canvas" : t === "tweak" ? "Tweak" : t === "code" ? "Code" : "Assistant"}
+              {t === "canvas" ? "Canvas" : t === "tweak" ? "Tweak" : t === "code" ? "Code" : t === "lesson" ? "Lesson" : "Assistant"}
             </button>
           ))}
         </nav>
@@ -114,6 +114,7 @@ const ICONS: Record<StudioTab, string> = {
   canvas: "M4 4h16v16H4z",
   tweak: "M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6",
   code: "M9 7l-5 5 5 5M15 7l5 5-5 5",
+  lesson: "M4 5h6a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h6z",
   chat: "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z",
 };
 

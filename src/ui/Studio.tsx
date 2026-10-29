@@ -13,11 +13,12 @@ import { Variations } from "./Variations";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
 import { PalettePanel } from "./PalettePanel";
 import { useStageGestures } from "./useStageGestures";
-import { getChallenge } from "../lib/challenge";
+import { getChallenge, lessonFor } from "../lib/challenge";
+import { LessonPanel } from "./LessonPanel";
 import { PALETTE_KEY } from "../../shared/palettes";
 
-export type StudioTab = "canvas" | "tweak" | "code" | "chat";
-type SideTab = "tweak" | "chat" | "saved";
+export type StudioTab = "canvas" | "tweak" | "code" | "chat" | "lesson";
+type SideTab = "tweak" | "chat" | "lesson" | "saved";
 
 interface Props {
   sketchId: string;
@@ -25,9 +26,11 @@ interface Props {
   desktop: boolean;
   tab: StudioTab;
   onTab(tab: StudioTab): void;
+  done: Set<string>;
+  onComplete(lessonId: string): void;
 }
 
-export function Studio({ sketchId, userId, desktop, tab, onTab }: Props) {
+export function Studio({ sketchId, userId, desktop, tab, onTab, done, onComplete }: Props) {
   const [sketch, setSketch] = useState<Sketch | null>(null);
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -42,17 +45,24 @@ export function Studio({ sketchId, userId, desktop, tab, onTab }: Props) {
 
   if (missing) return <div className="pad"><p>This sketch doesn't exist on this device.</p><a href="#/">Back to sketches</a></div>;
   if (!sketch) return <div className="pad muted">Loading…</div>;
-  return <StudioInner key={sketch.id} initial={sketch} userId={userId} desktop={desktop} tab={tab} onTab={onTab} />;
+  return <StudioInner key={sketch.id} initial={sketch} userId={userId} desktop={desktop} tab={tab} onTab={onTab} done={done} onComplete={onComplete} />;
 }
 
-function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch; userId: string; desktop: boolean; tab: StudioTab; onTab(t: StudioTab): void }) {
+function StudioInner(props: { initial: Sketch; userId: string; desktop: boolean; tab: StudioTab; onTab(t: StudioTab): void; done: Set<string>; onComplete(id: string): void }) {
+  const { initial, userId, desktop, tab, onTab } = props;
   const [sketch, setSketchState] = useState(initial);
   const [draft, setDraft] = useState(initial.code);
   const [specs, setSpecs] = useState<Record<string, ParamSpec>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [logs, setLogs] = useState<{ level: string; text: string }[]>([]);
   const [seedHistory, setSeedHistory] = useState<string[]>([]);
-  const [side, setSide] = useState<SideTab>("tweak");
+  // Sketches that came from a lesson open with that lesson beside the code.
+  const [side, setSide] = useState<SideTab>(() => (lessonFor(initial.id)?.linked ? "lesson" : "tweak"));
+  // Mounted on first view, then kept, so the reading position survives tab switches.
+  const [lessonMounted, setLessonMounted] = useState(side === "lesson");
+  useEffect(() => {
+    if (side === "lesson" || tab === "lesson") setLessonMounted(true);
+  }, [side, tab]);
   const [autoRun, setAutoRun] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -181,6 +191,17 @@ function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch
   });
   const panes = usePaneWidths(desktop);
 
+  const lessonPanel = lessonMounted && (
+    <LessonPanel
+      sketchId={sketch.id}
+      done={props.done}
+      onComplete={props.onComplete}
+      onUseCode={(code) => {
+        if (draft.trim() === code.trim() || confirm("Replace the code in the editor with this example? (Save a code version first if you want to keep yours.)")) applyCode(code);
+        if (!desktop) onTab("code");
+      }}
+    />
+  );
   const activePalette = sketch.values[PALETTE_KEY] as string[] | undefined;
   const tweak = (
     <>
@@ -283,14 +304,15 @@ function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch
       {desktop ? (
         <section className="pane side-pane">
           <div className="tabs" role="tablist">
-            {(["tweak", "chat", "saved"] as const).map((t) => (
+            {(["tweak", "chat", "lesson", "saved"] as const).map((t) => (
               <button key={t} role="tab" aria-selected={side === t} className={side === t ? "on" : ""} onClick={() => setSide(t)}>
-                {t === "tweak" ? "Tweak" : t === "chat" ? "Assistant" : "Saved"}
+                {t === "tweak" ? "Tweak" : t === "chat" ? "Assistant" : t === "lesson" ? "Lesson" : "Saved"}
               </button>
             ))}
           </div>
           <div className="side-body" hidden={side !== "tweak"}>{tweak}</div>
           <div className="side-body chat-body" hidden={side !== "chat"}>{chat}</div>
+          <div className="side-body lesson-body" hidden={side !== "lesson"}>{lessonPanel}</div>
           {side === "saved" && <div className="side-body"><Saved sketch={sketch} onRestore={(p) => update(p)} onCode={applyCode} /></div>}
         </section>
       ) : (
@@ -300,6 +322,7 @@ function StudioInner({ initial, userId, desktop, tab, onTab }: { initial: Sketch
             <details className="pad"><summary>Saved outputs & versions</summary><Saved sketch={sketch} onRestore={(p) => update(p)} onCode={applyCode} /></details>
           </section>
           <section className="pane chat-pane">{chat}</section>
+          <section className="pane lesson-pane">{lessonPanel}</section>
         </>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}

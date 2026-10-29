@@ -17,6 +17,27 @@ export function setHintsUsed(sketchId: string, lessonId: string, hints: number) 
   try { localStorage.setItem(key(sketchId), JSON.stringify({ lessonId, hints })); } catch { /* private mode */ }
 }
 
+// Which lesson a sketch came from (an example or a challenge), for the studio's Lesson tab.
+const lessonKey = (sketchId: string) => `art-lab:lesson:${sketchId}`;
+const LAST_LESSON = "art-lab:last-lesson";
+
+export function linkLesson(sketchId: string, lessonId: string) {
+  try {
+    localStorage.setItem(lessonKey(sketchId), lessonId);
+    localStorage.setItem(LAST_LESSON, lessonId);
+  } catch { /* private mode */ }
+}
+
+/** The lesson linked to this sketch, else the last one read in the studio, if any. */
+export function lessonFor(sketchId: string): { lessonId: string; linked: boolean } | null {
+  try {
+    const linked = localStorage.getItem(lessonKey(sketchId)) ?? getChallenge(sketchId)?.lessonId;
+    if (linked && LESSONS.some((l) => l.id === linked)) return { lessonId: linked, linked: true };
+    const last = localStorage.getItem(LAST_LESSON);
+    return last && LESSONS.some((l) => l.id === last) ? { lessonId: last, linked: false } : null;
+  } catch { return null; }
+}
+
 export const nextHint = (used: number): HintLevel => (Math.min(3, used + 1) as HintLevel);
 
 /** A starter sketch for a lesson's challenge, linked to it so the assistant coaches instead of solving. */
@@ -27,5 +48,6 @@ export async function startChallenge(lessonId: string) {
   const code = `// Challenge from "${lesson.title}":\n${brief}\n\nawait $genart.waitForAdapter();\nconst param = await $genart.setParams({});\n\nconst { ctx, width, height } = lab.canvas();\nconst rnd = $genart.random.rnd;\n\nctx.fillStyle = "#f1ece2";\nctx.fillRect(0, 0, width, height);\n\n// Your code here.\n`;
   const s = await createSketch({ title: `Challenge: ${lesson.title.replace(/^\d+\.\s*/, "")}`, code }, false);
   setHintsUsed(s.id, lessonId, 0);
+  linkLesson(s.id, lessonId);
   location.hash = `#/sketch/${s.id}`;
 }
