@@ -70,7 +70,7 @@ export function Variations(props: {
         const [v, i] = job;
         let patch: Partial<Variant>;
         try {
-          const blob = await renderToPNG({ code: sketch.code, seed: v.seed, values: v.values, width: sketch.width, height: sketch.height, scale });
+          const blob = await renderToPNG({ code: sketch.code, engine: sketch.engine, seed: v.seed, values: v.values, width: sketch.width, height: sketch.height, scale });
           const url = URL.createObjectURL(blob);
           urls.current.push(url);
           patch = { url };

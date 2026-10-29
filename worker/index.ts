@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { routeAgentRequest } from "agents";
 import { getUser, type User } from "./auth";
-import type { Output, Palette, Sketch, Version } from "../shared/types";
+import type { Engine, Output, Palette, Sketch, Version } from "../shared/types";
 import { MAX_PALETTE_COLORS, isHexColor } from "../shared/palettes";
 
 export { ChatAgent } from "./agent";
@@ -19,13 +19,15 @@ app.use("*", async (c, next) => {
 app.get("/me", (c) => c.json(c.get("user")));
 
 type SketchRow = {
-  id: string; title: string; code: string; seed: string; param_values: string;
+  id: string; title: string; code: string; engine: string; seed: string; param_values: string;
   width: number; height: number; updated_at: number; created_at: number;
 };
 const toSketch = (r: SketchRow): Sketch => ({
-  id: r.id, title: r.title, code: r.code, seed: r.seed, values: JSON.parse(r.param_values),
+  id: r.id, title: r.title, code: r.code, engine: asEngine(r.engine), seed: r.seed, values: JSON.parse(r.param_values),
   width: r.width, height: r.height, updatedAt: r.updated_at, createdAt: r.created_at,
 });
+
+const asEngine = (e: unknown): Engine => (e === "p5" ? "p5" : "canvas");
 
 app.get("/sketches", async (c) => {
   const { results } = await c.env.DB.prepare(
@@ -42,12 +44,12 @@ app.put("/sketches/:id", async (c) => {
   }
   const user = c.get("user").id;
   const res = await c.env.DB.prepare(
-    `INSERT INTO sketches (id, user_id, title, code, seed, param_values, width, height, updated_at, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-     ON CONFLICT(id) DO UPDATE SET title = ?3, code = ?4, seed = ?5, param_values = ?6, width = ?7, height = ?8, updated_at = ?9
+    `INSERT INTO sketches (id, user_id, title, code, seed, param_values, width, height, updated_at, created_at, engine)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+     ON CONFLICT(id) DO UPDATE SET title = ?3, code = ?4, seed = ?5, param_values = ?6, width = ?7, height = ?8, updated_at = ?9, engine = ?11
      WHERE sketches.user_id = ?2 AND sketches.updated_at < ?9`,
   ).bind(s.id, user, s.title.slice(0, 200), s.code, s.seed.slice(0, 100), JSON.stringify(s.values ?? {}),
-    s.width | 0, s.height | 0, s.updatedAt, s.createdAt).run();
+    s.width | 0, s.height | 0, s.updatedAt, s.createdAt, asEngine(s.engine)).run();
   return c.json({ ok: true, changed: res.meta.changes > 0 });
 });
 
@@ -84,11 +86,11 @@ app.post("/sketches/:id/versions", async (c) => {
 });
 
 type OutputRow = {
-  id: string; sketch_id: string; code: string; seed: string; param_values: string; width: number; height: number;
+  id: string; sketch_id: string; code: string; engine: string; seed: string; param_values: string; width: number; height: number;
   favorite: number; created_at: number;
 };
 const toOutput = (r: OutputRow): Output => ({
-  id: r.id, sketchId: r.sketch_id, code: r.code, seed: r.seed, values: JSON.parse(r.param_values), width: r.width, height: r.height,
+  id: r.id, sketchId: r.sketch_id, code: r.code, engine: asEngine(r.engine), seed: r.seed, values: JSON.parse(r.param_values), width: r.width, height: r.height,
   url: `/api/outputs/${r.id}/image`, favorite: !!r.favorite, createdAt: r.created_at,
 });
 
@@ -117,12 +119,12 @@ app.post("/outputs", async (c) => {
   const key = `${user}/${meta.sketchId}/${id}.png`;
   await c.env.BUCKET.put(key, image.stream(), { httpMetadata: { contentType: "image/png" } });
   const row: OutputRow = {
-    id, sketch_id: meta.sketchId, code: String(meta.code ?? ""), seed: String(meta.seed), param_values: JSON.stringify(meta.values ?? {}),
+    id, sketch_id: meta.sketchId, code: String(meta.code ?? ""), engine: asEngine(meta.engine), seed: String(meta.seed), param_values: JSON.stringify(meta.values ?? {}),
     width: meta.width | 0, height: meta.height | 0, favorite: 0, created_at: Date.now(),
   };
   await c.env.DB.prepare(
-    "INSERT INTO outputs (id, sketch_id, user_id, code, seed, param_values, width, height, r2_key, favorite, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
-  ).bind(id, row.sketch_id, user, row.code, row.seed, row.param_values, row.width, row.height, key, row.created_at).run();
+    "INSERT INTO outputs (id, sketch_id, user_id, code, engine, seed, param_values, width, height, r2_key, favorite, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+  ).bind(id, row.sketch_id, user, row.code, row.engine, row.seed, row.param_values, row.width, row.height, key, row.created_at).run();
   return c.json(toOutput(row));
 });
 

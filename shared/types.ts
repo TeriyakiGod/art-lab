@@ -1,7 +1,16 @@
+/** The runtime a sketch's code is written for. */
+export type Engine = "canvas" | "p5";
+export const ENGINES: { id: Engine; label: string }[] = [
+  { id: "canvas", label: "Canvas" },
+  { id: "p5", label: "p5.js" },
+];
+
 export interface Sketch {
   id: string;
   title: string;
   code: string;
+  /** Missing on sketches made before p5 support: treat as "canvas". */
+  engine?: Engine;
   seed: string;
   values: Record<string, unknown>;
   width: number;
@@ -31,6 +40,7 @@ export interface Output {
   sketchId: string;
   /** The exact code the output was rendered with. */
   code: string;
+  engine: Engine;
   seed: string;
   values: Record<string, unknown>;
   width: number;
@@ -53,7 +63,7 @@ export const DEFAULT_CHAT_MODEL: ChatModelId = "@cf/zai-org/glm-4.7-flash";
 /** Extra data the client sends with every chat turn. */
 export type ChatBody = {
   model?: string;
-  sketch?: { title: string; code: string; values: Record<string, unknown>; seed: string };
+  sketch?: { title: string; code: string; engine?: Engine; values: Record<string, unknown>; seed: string };
   errors?: string[];
   lessonId?: string;
 };

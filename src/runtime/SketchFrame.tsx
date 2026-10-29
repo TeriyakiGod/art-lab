@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { buildSrcdoc, type ParamSpec, type RunConfig, type SandboxMessage } from "./sandbox";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { buildSrcdoc, engineReady, loadEngine, type ParamSpec, type RunConfig, type SandboxMessage } from "./sandbox";
+import type { Engine } from "../../shared/types";
 
 export interface SketchError {
   message: string;
@@ -13,6 +14,7 @@ export interface SketchFrameHandle {
 
 interface Props {
   code: string;
+  engine?: Engine;
   seed: string;
   values: Record<string, unknown>;
   width: number;
@@ -38,19 +40,28 @@ function listen(frame: () => HTMLIFrameElement | null, channel: string, fn: (m: 
 }
 
 export const SketchFrame = forwardRef<SketchFrameHandle, Props>(function SketchFrame(props, ref) {
-  const { code, seed, values, width, height, dpr = 1, className } = props;
+  const { code, engine, seed, values, width, height, dpr = 1, className } = props;
   const iframe = useRef<HTMLIFrameElement>(null);
   const cbs = useRef(props);
   cbs.current = props;
 
+  // p5 sketches wait for the p5 source to load (once).
+  const [, loaded] = useState(0);
+  const ready = engineReady(engine);
+  useEffect(() => {
+    if (!ready) void loadEngine(engine).then(() => loaded((n) => n + 1));
+  }, [engine, ready]);
+
   const valuesKey = JSON.stringify(values);
   const run = useMemo(() => {
+    if (!ready) return null;
     const channel = newChannel();
-    const cfg: RunConfig = { code, seed, values: JSON.parse(valuesKey), width, height, dpr, mode: "edit", channel };
+    const cfg: RunConfig = { code, engine, seed, values: JSON.parse(valuesKey), width, height, dpr, mode: "edit", channel };
     return { channel, srcdoc: buildSrcdoc(cfg) };
-  }, [code, seed, valuesKey, width, height, dpr]);
+  }, [ready, code, engine, seed, valuesKey, width, height, dpr]);
 
   useEffect(() => {
+    if (!run) return;
     cbs.current.onRun?.();
     let lastAlive = 0;
     let dead = false;
@@ -80,7 +91,7 @@ export const SketchFrame = forwardRef<SketchFrameHandle, Props>(function SketchF
   }, [run]);
 
   useImperativeHandle(ref, () => ({
-    capture: (maxSize?: number) => requestCapture(iframe.current, run.channel, maxSize),
+    capture: (maxSize?: number) => (run ? requestCapture(iframe.current, run.channel, maxSize) : Promise.reject(new Error("sketch not running"))),
   }), [run]);
 
   return (
@@ -89,7 +100,7 @@ export const SketchFrame = forwardRef<SketchFrameHandle, Props>(function SketchF
       className={className}
       title="Sketch"
       sandbox="allow-scripts"
-      srcDoc={run.srcdoc}
+      srcDoc={run?.srcdoc ?? ""}
       style={{ aspectRatio: `${width} / ${height}` }}
     />
   );
@@ -115,7 +126,8 @@ function requestCapture(frame: HTMLIFrameElement | null, channel: string, maxSiz
  * Captures once the sketch's top-level code has finished; sketches that never
  * finish (e.g. awaiting forever) are captured a few seconds after their params.
  */
-export function renderToPNG(opts: Omit<RunConfig, "channel" | "mode" | "dpr"> & { scale: number }): Promise<Blob> {
+export async function renderToPNG(opts: Omit<RunConfig, "channel" | "mode" | "dpr"> & { scale: number }): Promise<Blob> {
+  await loadEngine(opts.engine);
   const channel = newChannel();
   const frame = document.createElement("iframe");
   frame.sandbox.add("allow-scripts");

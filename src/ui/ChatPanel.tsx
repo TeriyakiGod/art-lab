@@ -47,7 +47,7 @@ export function ChatPanel(props: Props) {
       const { sketch, errors, lessonId } = latest.current;
       return {
         model: modelRef.current,
-        sketch: { title: sketch.title, code: sketch.code, values: sketch.values, seed: sketch.seed },
+        sketch: { title: sketch.title, code: sketch.code, engine: sketch.engine ?? "canvas", values: sketch.values, seed: sketch.seed },
         errors,
         lessonId,
       };

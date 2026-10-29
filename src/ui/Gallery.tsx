@@ -11,7 +11,7 @@ import { createSketch } from "../lib/create";
  */
 export async function openOutput(o: Output) {
   const s = await getSketch(o.sketchId);
-  if (s && s.code === o.code) {
+  if (s && s.code === o.code && (s.engine ?? "canvas") === o.engine) {
     await saveSketch({ ...s, seed: o.seed, values: o.values, updatedAt: Date.now() });
     location.hash = `#/sketch/${s.id}`;
     return;
@@ -21,6 +21,7 @@ export async function openOutput(o: Output) {
   await createSketch({
     title: `${s?.title ?? "Saved output"} (seed ${o.seed})`,
     code: o.code,
+    engine: o.engine,
     seed: o.seed,
     values: o.values,
     width: size(o.width),

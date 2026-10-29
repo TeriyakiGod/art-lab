@@ -51,6 +51,7 @@ input[type="text"], textarea, .seed-input, .title-input {
 .pad-s { padding: 8px 10px; }
 .row { display: flex; align-items: center; gap: 8px; }
 .row.wrap { flex-wrap: wrap; }
+.card .badge { margin-left: 8px; vertical-align: middle; }
 .badge { font-size: 0.75rem; background: var(--panel-2); border: 1px solid var(--line); padding: 2px 8px; border-radius: 99px; color: var(--muted); }
 
 /* ---- app shell ---- */

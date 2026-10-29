@@ -192,7 +192,53 @@
 
   // Called after the sketch's top-level code. A timeout (not rAF, which is
   // throttled in hidden cross-origin frames) lets pending paints settle.
-  window.__labDone = () => setTimeout(() => post({ type: "lab:done" }), 0);
+  let doneSent = false;
+  window.__labDone = () => {
+    if (doneSent) return;
+    doneSent = true;
+    setTimeout(() => post({ type: "lab:done" }), 0);
+  };
+
+  // ---- p5.js engine ----------------------------------------------------------
+  // The sandbox appends a call with the module's setup/draw/event functions
+  // (module functions aren't globals, which p5's global mode needs).
+  window.__labP5 = (fns) => {
+    const seedInt = cyrb128(cfg.seed)[0];
+    window.setup = async function () {
+      taskStart = performance.now(); // setup runs in a later task than the module
+      // Same seed, same picture: seed p5's own random() and noise().
+      randomSeed(seedInt);
+      noiseSeed(seedInt);
+      // createCanvas() with no size gets the sketch size; density follows exports (1x/2x/4x).
+      // p5's globals are read-only properties, so plain assignment would be ignored.
+      const create = window.createCanvas;
+      Object.defineProperty(window, "createCanvas", {
+        configurable: true,
+        writable: true,
+        value: (w, h, ...rest) => {
+          pixelDensity(cfg.dpr);
+          const c = create(w ?? $genart.screen.width, h ?? $genart.screen.height, ...rest);
+          pixelDensity(cfg.dpr);
+          mainCanvas = c && c.elt;
+          return c;
+        },
+      });
+      pixelDensity(cfg.dpr);
+      if (fns.setup) await fns.setup();
+      if (!fns.draw) window.__labDone();
+    };
+    if (fns.draw) {
+      window.draw = function () {
+        const r = fns.draw.apply(this, arguments);
+        window.__labDone(); // the first frame is drawn
+        return r;
+      };
+    }
+    for (const [name, fn] of Object.entries(fns)) {
+      if (fn && name !== "setup" && name !== "draw") window[name] = fn;
+    }
+    new p5(); // no sketch argument: global mode, using window.setup/draw
+  };
 
   window.addEventListener("message", (e) => {
     if (e.source !== parent || e.data?.channel !== cfg.channel) return;
@@ -202,6 +248,9 @@
   // ---- beginner helpers ----------------------------------------------------------
   const rnd = () => prng.rnd();
   window.lab = {
+    /** The sketch size in CSS pixels (handy for p5: createCanvas(lab.width, lab.height)). */
+    get width() { return $genart.screen.width; },
+    get height() { return $genart.screen.height; },
     canvas() {
       const { width, height, dpr } = $genart.screen;
       const canvas = document.createElement("canvas");

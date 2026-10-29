@@ -86,6 +86,14 @@ Helpers: `lab.noise2D`, `lab.noise3D`, `lab.random`, `lab.pick`, `lab.gaussian`,
 values as `$palette`, so outputs and variations keep it).
 Animate with `$genart.setUpdate((timeMs, frame) => { …; return true; })`.
 
+### p5.js sketches
+
+Pick **p5.js** in the studio's engine menu (or start from the *Noise waves* template) and write
+`setup()` / `draw()` as usual, below the same `$genart.setParams` block. `random()` and `noise()`
+are seeded from the sketch seed, `createCanvas(lab.width, lab.height)` gives the sketch size, and
+`lab.palette()` works too. p5 sketches export up to 4× (8× needs `lab.canvas()`). p5.js v2 (LGPL-2.1)
+is bundled unmodified and only loaded into p5 sketches.
+
 ## Known limits (Phase 1)
 
 - The loop guard instruments braced `for`/`while`/`do` loops only; a brace-less infinite loop

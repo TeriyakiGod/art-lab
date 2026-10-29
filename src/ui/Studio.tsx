@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Output, Sketch, Version } from "../../shared/types";
+import { ENGINES, type Engine, type Output, type Sketch, type Version } from "../../shared/types";
 import { SketchFrame, renderToPNG, type SketchFrameHandle } from "../runtime/SketchFrame";
 import { SINGLE_CANVAS_PIXELS, renderLargePNG } from "../runtime/bigExport";
 import type { ParamSpec } from "../runtime/sandbox";
@@ -114,7 +114,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   const exportPNG = async (scale: number) => {
     setBusy(`Rendering ${scale}×…`);
     try {
-      const opts = { code: sketch.code, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale };
+      const opts = { code: sketch.code, engine: sketch.engine, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale };
       // Too big for one canvas (especially on phones): render in strips.
       const blob = sketch.width * sketch.height * scale * scale > SINGLE_CANVAS_PIXELS
         ? await renderLargePNG(opts, (done, total) => setBusy(`Rendering ${scale}×… ${Math.round((done / total) * 100)}%`))
@@ -135,10 +135,10 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
     setBusy("Saving…");
     try {
       await ensureSynced(sketch);
-      const blob = await renderToPNG({ code: sketch.code, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale: 2 });
+      const blob = await renderToPNG({ code: sketch.code, engine: sketch.engine, seed: sketch.seed, values: sketch.values, width: sketch.width, height: sketch.height, scale: 2 });
       const form = new FormData();
       form.set("image", new File([blob], "output.png", { type: "image/png" }));
-      form.set("meta", JSON.stringify({ sketchId: sketch.id, code: sketch.code, seed: sketch.seed, values: sketch.values, width: sketch.width * 2, height: sketch.height * 2 }));
+      form.set("meta", JSON.stringify({ sketchId: sketch.id, code: sketch.code, engine: sketch.engine ?? "canvas", seed: sketch.seed, values: sketch.values, width: sketch.width * 2, height: sketch.height * 2 }));
       await api<Output>("/outputs", { method: "POST", body: form });
       flash("Saved to this sketch's gallery");
     } catch (e) {
@@ -206,6 +206,10 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
       <section className="pane code-pane">
         <div className="pane-bar">
           <input className="title-input" aria-label="Sketch title" value={sketch.title} onChange={(e) => update({ title: e.target.value })} />
+          <select aria-label="Engine" className="engine-select" value={sketch.engine ?? "canvas"} title="What the code is written for"
+            onChange={(e) => update({ engine: e.target.value as Engine })}>
+            {ENGINES.map((en) => <option key={en.id} value={en.id}>{en.label}</option>)}
+          </select>
           <label className="small row" title="Run automatically while typing">
             <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} /> auto-run
           </label>
@@ -222,6 +226,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
             ref={frame}
             className="stage-frame"
             code={sketch.code}
+            engine={sketch.engine}
             seed={sketch.seed}
             values={runValues}
             width={sketch.width}
@@ -245,7 +250,7 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
           <div className="row">
             <button onClick={() => setShowVariations(true)} title="Explore 16 variations of this sketch">Variations</button>
             <button onClick={saveOutput} disabled={!!busy} title="Save this seed + params as an output">★ Save</button>
-            <ExportMenu disabled={!!busy} onExport={exportPNG} onVersion={saveVersion} />
+            <ExportMenu disabled={!!busy} maxScale={sketch.engine === "p5" ? 4 : 8} onExport={exportPNG} onVersion={saveVersion} />
           </div>
         </div>
         {busy && <div className="busy">{busy}</div>}
@@ -290,7 +295,8 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
   );
 }
 
-function ExportMenu({ disabled, onExport, onVersion }: { disabled: boolean; onExport(scale: number): void; onVersion(): void }) {
+// p5 draws to its own canvas, so it can't be rendered in strips: no 8× (see bigExport.ts).
+function ExportMenu({ disabled, maxScale, onExport, onVersion }: { disabled: boolean; maxScale: number; onExport(scale: number): void; onVersion(): void }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const pick = (fn: () => void) => () => {
     if (menu.current) menu.current.open = false;
@@ -300,7 +306,7 @@ function ExportMenu({ disabled, onExport, onVersion }: { disabled: boolean; onEx
     <details className="menu" ref={menu}>
       <summary aria-disabled={disabled}>Export ▾</summary>
       <div className="menu-list">
-        {[1, 2, 4, 8].map((s) => <button key={s} disabled={disabled} onClick={pick(() => onExport(s))}>PNG {s}×</button>)}
+        {[1, 2, 4, 8].filter((s) => s <= maxScale).map((s) => <button key={s} disabled={disabled} onClick={pick(() => onExport(s))}>PNG {s}×</button>)}
         <button onClick={pick(onVersion)}>Save code version…</button>
       </div>
     </details>

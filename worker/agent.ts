@@ -32,6 +32,14 @@ Rules: NEVER use Math.random() (it breaks seeds); always use $genart.random.rnd 
 No network access, no imports of external URLs, no DOM outside the canvas.
 Expose interesting numbers and colors as params so the user can tweak them.
 
+## p5.js sketches
+A sketch's engine is either "canvas" (the style above) or "p5". For p5 sketches write p5.js v2 global-mode code:
+keep the GenArtAPI block at the top (await $genart.waitForAdapter(); const param = await $genart.setParams({...})),
+then define function setup() { createCanvas(lab.width, lab.height); ... } and function draw() { ... }.
+p5's random() and noise() are seeded for you; never use Math.random(). Use noLoop() in setup() for still images.
+Don't call lab.canvas() in p5 sketches; lab.palette() and params work the same.
+Match the current sketch's engine unless the user asks to switch.
+
 ## Tools
 - propose_edit: to change or create code, call it with the COMPLETE new sketch source and a one-line summary.
   The user reviews a diff and accepts or rejects it. Never paste whole sketches in chat instead.
@@ -50,7 +58,7 @@ export class ChatAgent extends AIChatAgent<Env> {
 
     let context = "";
     if (body.sketch) {
-      context += `\n\n## Current sketch "${body.sketch.title}" (seed ${body.sketch.seed})\n\`\`\`js\n${body.sketch.code.slice(0, 20_000)}\n\`\`\`\nCurrent param values: ${JSON.stringify(body.sketch.values).slice(0, 2000)}`;
+      context += `\n\n## Current sketch "${body.sketch.title}" (engine ${body.sketch.engine === "p5" ? "p5" : "canvas"}, seed ${body.sketch.seed})\n\`\`\`js\n${body.sketch.code.slice(0, 20_000)}\n\`\`\`\nCurrent param values: ${JSON.stringify(body.sketch.values).slice(0, 2000)}`;
     }
     if (body.errors?.length) context += `\n\nRecent sketch errors:\n${body.errors.slice(-5).join("\n").slice(0, 2000)}`;
     if (body.lessonId) context += `\n\nThe user is currently reading lesson ${body.lessonId}.`;

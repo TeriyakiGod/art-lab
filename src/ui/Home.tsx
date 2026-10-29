@@ -27,8 +27,8 @@ export function Home({ done }: { done: Set<string> }) {
       <h2>Start from a template</h2>
       <div className="grid">
         {TEMPLATES.map((t) => (
-          <button key={t.id} className="card" onClick={() => void createSketch({ title: t.title, code: t.code })}>
-            <strong>{t.title}</strong>
+          <button key={t.id} className="card" onClick={() => void createSketch({ title: t.title, code: t.code, engine: t.engine })}>
+            <strong>{t.title}{t.engine === "p5" && <span className="badge">p5.js</span>}</strong>
             <span className="small muted">{t.description}</span>
           </button>
         ))}

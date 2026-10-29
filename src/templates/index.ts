@@ -1,8 +1,11 @@
+import type { Engine } from "../../shared/types";
+
 export interface Template {
   id: string;
   title: string;
   description: string;
   code: string;
+  engine?: Engine;
 }
 
 const blank = `await $genart.waitForAdapter();
@@ -231,6 +234,40 @@ function block(x, y, w, h, depth) {
 block(0, 0, width, height, param("depth"));
 `;
 
+const p5Waves = `// p5.js mode: write setup() and draw() like on the p5.js website.
+// random() and noise() are seeded for you, so the same seed gives the same picture.
+await $genart.waitForAdapter();
+
+const param = await $genart.setParams({
+  lines: $genart.params.range({ name: "Lines", desc: "How many waves", min: 5, max: 120, step: 1, default: 40 }),
+  amp: $genart.params.range({ name: "Wave height", desc: "How far waves swing", min: 0, max: 200, step: 1, default: 60 }),
+  detail: $genart.params.range({ name: "Noise detail", desc: "Smaller is smoother", min: 0.001, max: 0.02, step: 0.0005, default: 0.006 }),
+  weight: $genart.params.range({ name: "Line weight", desc: "Stroke thickness", min: 0.5, max: 6, step: 0.1, default: 1.5 }),
+});
+
+function setup() {
+  createCanvas(lab.width, lab.height);
+  noLoop(); // a still image: draw() runs once
+}
+
+function draw() {
+  const [bg, ...inks] = lab.palette(["#0b0b10", "#ff2e88", "#00e5ff", "#c6ff00"]);
+  background(bg);
+  noFill();
+  strokeWeight(param("weight"));
+  const n = param("lines");
+  for (let i = 0; i < n; i++) {
+    const y0 = map(i, 0, n - 1, height * 0.1, height * 0.9);
+    stroke(inks[i % inks.length]);
+    beginShape();
+    for (let x = 0; x <= width; x += 8) {
+      vertex(x, y0 + (noise(x * param("detail"), i * 0.15) - 0.5) * param("amp") * 2);
+    }
+    endShape();
+  }
+}
+`;
+
 export const TEMPLATES: Template[] = [
   { id: "blank", title: "Blank", description: "A canvas, two colors and a circle.", code: blank },
   { id: "noise-grid", title: "Noise grid", description: "Strokes rotated by simplex noise.", code: noiseGrid },
@@ -238,4 +275,5 @@ export const TEMPLATES: Template[] = [
   { id: "flow-field", title: "Flow field", description: "Particle trails following a noise field.", code: flowField },
   { id: "circle-packing", title: "Circle packing", description: "Non-overlapping circles of many sizes.", code: circlePacking },
   { id: "palette-blocks", title: "Palette blocks", description: "Recursive blocks colored from your palette.", code: paletteBlocks },
+  { id: "p5-waves", title: "Noise waves", description: "Layered noise lines, written in p5.js.", code: p5Waves, engine: "p5" },
 ];
