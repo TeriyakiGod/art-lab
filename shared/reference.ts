@@ -278,7 +278,9 @@ export const REFERENCE: RefSection[] = [
     intro:
       "The `ctx` from `lab.canvas()` is the browser's standard drawing API. These are the calls you'll use most; the [full list is on MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D).",
     entries: [
-      { name: "ctx.fillStyle", sig: 'ctx.fillStyle = "#e4572e"', summary: "Color for fills. Accepts hex, `rgb()`, `hsl()` and `oklch()`.", engine: "canvas" },
+      { name: "ctx.fillStyle", sig: 'ctx.fillStyle = "#e4572e"', summary: "Color for fills, as a string in quotes: `\"#e4572e\"`, `\"rgb(228, 87, 46)\"`, `\"hsl(14, 77%, 54%)\"` or `\"oklch(0.65 0.18 35)\"`.",
+        details: "Colors are text, so `rgb(...)` without quotes fails with *rgb is not defined*. To build one from numbers, use a template string: `` ctx.fillStyle = `rgb(${r}, ${g}, ${b})` ``. (In p5, `fill(255, 0, 0)` takes plain numbers instead.)",
+        engine: "canvas" },
       { name: "ctx.strokeStyle", sig: 'ctx.strokeStyle = "#1d1b22"', summary: "Color for lines and outlines.", engine: "canvas" },
       { name: "ctx.lineWidth", sig: "ctx.lineWidth = 2", summary: "Line thickness in pixels.", engine: "canvas" },
       { name: "ctx.globalAlpha", sig: "ctx.globalAlpha = 0.5", summary: "Opacity for everything drawn next, 0 (invisible) to 1.", engine: "canvas" },
