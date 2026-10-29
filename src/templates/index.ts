@@ -194,10 +194,48 @@ for (let i = 0; i < param("attempts"); i++) {
 }
 `;
 
+const paletteBlocks = `// Recursive subdivision: split the canvas into blocks and fill them from the palette.
+// Pick a palette in the Tweak panel to recolor it.
+await $genart.waitForAdapter();
+
+const param = await $genart.setParams({
+  depth: $genart.params.range({ name: "Depth", desc: "How many times blocks can split", min: 1, max: 9, step: 1, default: 6 }),
+  stop: $genart.params.range({ name: "Stop chance", desc: "Chance a block stops splitting early", min: 0, max: 0.6, step: 0.01, default: 0.2 }),
+  gap: $genart.params.range({ name: "Gap", desc: "Space between blocks", min: 0, max: 20, step: 1, default: 6 }),
+});
+
+const { ctx, width, height } = lab.canvas();
+const rnd = $genart.random.rnd;
+const [bg, ...colors] = lab.palette();
+
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, width, height);
+
+function block(x, y, w, h, depth) {
+  if (depth === 0 || (depth < param("depth") && rnd() < param("stop"))) {
+    const g = param("gap") / 2;
+    ctx.fillStyle = lab.pick(colors.length ? colors : [bg]);
+    ctx.fillRect(x + g, y + g, w - 2 * g, h - 2 * g);
+    return;
+  }
+  const t = lab.random(0.3, 0.7);
+  if (w > h) {
+    block(x, y, w * t, h, depth - 1);
+    block(x + w * t, y, w * (1 - t), h, depth - 1);
+  } else {
+    block(x, y, w, h * t, depth - 1);
+    block(x, y + h * t, w, h * (1 - t), depth - 1);
+  }
+}
+
+block(0, 0, width, height, param("depth"));
+`;
+
 export const TEMPLATES: Template[] = [
   { id: "blank", title: "Blank", description: "A canvas, two colors and a circle.", code: blank },
   { id: "noise-grid", title: "Noise grid", description: "Strokes rotated by simplex noise.", code: noiseGrid },
   { id: "truchet", title: "Truchet tiles", description: "Random quarter-circle tiles that connect.", code: truchet },
   { id: "flow-field", title: "Flow field", description: "Particle trails following a noise field.", code: flowField },
   { id: "circle-packing", title: "Circle packing", description: "Non-overlapping circles of many sizes.", code: circlePacking },
+  { id: "palette-blocks", title: "Palette blocks", description: "Recursive blocks colored from your palette.", code: paletteBlocks },
 ];

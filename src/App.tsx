@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "./lib/api";
 import { pullSketches, pushPending } from "./lib/store";
+import { pullPalettes, pushPalettes } from "./lib/palettes";
 import { Gallery } from "./ui/Gallery";
 import { Home } from "./ui/Home";
 import { LessonList, LessonPage } from "./ui/Learn";
@@ -41,6 +42,8 @@ export function App() {
         try { localStorage.setItem("art-lab:user", JSON.stringify(u)); } catch { /* ignore */ }
         void pullSketches().catch(() => {});
         void pushPending();
+        void pullPalettes().catch(() => {});
+        void pushPalettes();
         void api<string[]>("/progress").then((ids) => setDone((d) => new Set([...d, ...ids]))).catch(() => {});
       })
       .catch(() => {

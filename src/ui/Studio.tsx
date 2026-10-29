@@ -10,6 +10,8 @@ import { SeedBar } from "./SeedBar";
 import { ChatPanel } from "./ChatPanel";
 import { Variations } from "./Variations";
 import { DiffStats, DiffView, diffSummary } from "./DiffView";
+import { PalettePanel } from "./PalettePanel";
+import { PALETTE_KEY } from "../../shared/palettes";
 
 export type StudioTab = "canvas" | "tweak" | "code" | "chat";
 type SideTab = "tweak" | "chat" | "saved";
@@ -163,16 +165,26 @@ function StudioInner({ initial, userId, desktop, tab }: { initial: Sketch; userI
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) dx < 0 ? setSeed(randomSeed()) : backSeed();
   };
 
+  const activePalette = sketch.values[PALETTE_KEY] as string[] | undefined;
   const tweak = (
-    <ParamsPanel
-      specs={specs}
-      values={sketch.values}
-      onChange={(id, v) => update({ values: { ...sketch.values, [id]: v } })}
-      onReset={(id) => {
-        const { [id]: _, ...rest } = sketch.values;
-        update({ values: rest });
-      }}
-    />
+    <>
+      <ParamsPanel
+        specs={specs}
+        values={sketch.values}
+        onChange={(id, v) => update({ values: { ...sketch.values, [id]: v } })}
+        onReset={(id) => {
+          const { [id]: _, ...rest } = sketch.values;
+          update({ values: rest });
+        }}
+      />
+      <PalettePanel
+        active={activePalette}
+        onChange={(colors) => {
+          const { [PALETTE_KEY]: _, ...rest } = sketch.values;
+          update({ values: colors ? { ...rest, [PALETTE_KEY]: colors } : rest });
+        }}
+      />
+    </>
   );
   const chat = (
     <ChatPanel

@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { routeAgentRequest } from "agents";
 import { getUser, type User } from "./auth";
-import type { Output, Sketch, Version } from "../shared/types";
+import type { Output, Palette, Sketch, Version } from "../shared/types";
+import { MAX_PALETTE_COLORS, isHexColor } from "../shared/palettes";
 
 export { ChatAgent } from "./agent";
 
@@ -150,6 +151,34 @@ app.delete("/outputs/:id", async (c) => {
     await c.env.BUCKET.delete(row.r2_key);
     await c.env.DB.prepare("DELETE FROM outputs WHERE id = ? AND user_id = ?").bind(c.req.param("id"), user).run();
   }
+  return c.json({ ok: true });
+});
+
+type PaletteRow = { id: string; name: string; colors: string; updated_at: number; created_at: number };
+const toPalette = (r: PaletteRow): Palette => ({ id: r.id, name: r.name, colors: JSON.parse(r.colors), updatedAt: r.updated_at, createdAt: r.created_at });
+
+app.get("/palettes", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT * FROM palettes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200")
+    .bind(c.get("user").id).all<PaletteRow>();
+  return c.json(results.map(toPalette));
+});
+
+// Upsert, newest updatedAt wins (same rule as sketches).
+app.put("/palettes/:id", async (c) => {
+  const p = await c.req.json<Palette>();
+  const ok = p.id === c.req.param("id") && typeof p.name === "string" && Array.isArray(p.colors)
+    && p.colors.length > 0 && p.colors.length <= MAX_PALETTE_COLORS && p.colors.every(isHexColor);
+  if (!ok) return c.json({ error: "invalid palette" }, 400);
+  const res = await c.env.DB.prepare(
+    `INSERT INTO palettes (id, user_id, name, colors, updated_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+     ON CONFLICT(id) DO UPDATE SET name = ?3, colors = ?4, updated_at = ?5
+     WHERE palettes.user_id = ?2 AND palettes.updated_at < ?5`,
+  ).bind(p.id, c.get("user").id, p.name.slice(0, 80), JSON.stringify(p.colors), p.updatedAt, p.createdAt).run();
+  return c.json({ ok: true, changed: res.meta.changes > 0 });
+});
+
+app.delete("/palettes/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM palettes WHERE id = ? AND user_id = ?").bind(c.req.param("id"), c.get("user").id).run();
   return c.json({ ok: true });
 });
 

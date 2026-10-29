@@ -18,6 +18,14 @@ export interface Version {
   createdAt: number;
 }
 
+export interface Palette {
+  id: string;
+  name: string;
+  colors: string[];
+  updatedAt: number;
+  createdAt: number;
+}
+
 export interface Output {
   id: string;
   sketchId: string;

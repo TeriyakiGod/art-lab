@@ -81,7 +81,9 @@ const { ctx, width, height } = lab.canvas();
 const rnd = $genart.random.rnd; // seeded: never use Math.random()
 ```
 
-Helpers: `lab.noise2D`, `lab.noise3D`, `lab.random`, `lab.pick`, `lab.gaussian`, `lab.map`.
+Helpers: `lab.noise2D`, `lab.noise3D`, `lab.random`, `lab.pick`, `lab.gaussian`, `lab.map`, and
+`lab.palette(fallback?)`, which returns the palette picked in the Tweak panel (stored in the sketch's
+values as `$palette`, so outputs and variations keep it).
 Animate with `$genart.setUpdate((timeMs, frame) => { …; return true; })`.
 
 ## Known limits (Phase 1)

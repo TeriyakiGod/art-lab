@@ -25,7 +25,9 @@ const rnd = $genart.random.rnd;                // seeded random in [0, 1)
 // optional animation: $genart.setUpdate((timeMs, frame) => { ...; return true; });
 \`\`\`
 Helpers on the global \`lab\` object: lab.canvas(), lab.noise2D(x, y), lab.noise3D(x, y, z) (seeded simplex noise in [-1, 1]),
-lab.random(min, max), lab.pick(array), lab.gaussian(mean = 0, sd = 1), lab.map(v, inMin, inMax, outMin, outMax).
+lab.random(min, max), lab.pick(array), lab.gaussian(mean = 0, sd = 1), lab.map(v, inMin, inMax, outMin, outMax),
+lab.palette(fallbackColors?) (array of hex colors the user picked in the Palette panel, else the fallback; colors[0] is usually the background).
+Prefer lab.palette() over hard-coded colors when a sketch needs several colors, so the user can swap palettes.
 Rules: NEVER use Math.random() (it breaks seeds); always use $genart.random.rnd or lab helpers.
 No network access, no imports of external URLs, no DOM outside the canvas.
 Expose interesting numbers and colors as params so the user can tweak them.

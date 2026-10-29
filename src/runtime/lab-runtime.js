@@ -218,6 +218,13 @@
       return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
     },
     map: (v, a, b, c, d) => c + ((v - a) / (b - a)) * (d - c),
+    // The palette picked in the Tweak panel (stored in values under "$palette"),
+    // else the sketch's own fallback, else a neutral default.
+    palette(fallback) {
+      const p = cfg.values && cfg.values["$palette"];
+      if (Array.isArray(p) && p.length) return p.slice();
+      return Array.isArray(fallback) && fallback.length ? fallback.slice() : ["#f1ece2", "#1d1b22", "#e4572e", "#29335c", "#f3a712"];
+    },
   };
 
   post({ type: "lab:ready" });
