@@ -21,6 +21,8 @@ export interface Version {
 export interface Output {
   id: string;
   sketchId: string;
+  /** The exact code the output was rendered with. */
+  code: string;
   seed: string;
   values: Record<string, unknown>;
   width: number;

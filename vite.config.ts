@@ -34,6 +34,19 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallbackDenylist: [/^\/api\//, /^\/agents\//],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // Output images never change, so keep them; the output list prefers fresh data but works offline.
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\/outputs\/[^/]+\/image$/,
+            handler: "CacheFirst",
+            options: { cacheName: "output-images", expiration: { maxEntries: 500 } },
+          },
+          {
+            urlPattern: /\/api\/outputs(\?.*)?$/,
+            handler: "NetworkFirst",
+            options: { cacheName: "output-lists", networkTimeoutSeconds: 4 },
+          },
+        ],
       },
     }),
   ],

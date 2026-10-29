@@ -83,11 +83,11 @@ app.post("/sketches/:id/versions", async (c) => {
 });
 
 type OutputRow = {
-  id: string; sketch_id: string; seed: string; param_values: string; width: number; height: number;
+  id: string; sketch_id: string; code: string; seed: string; param_values: string; width: number; height: number;
   favorite: number; created_at: number;
 };
 const toOutput = (r: OutputRow): Output => ({
-  id: r.id, sketchId: r.sketch_id, seed: r.seed, values: JSON.parse(r.param_values), width: r.width, height: r.height,
+  id: r.id, sketchId: r.sketch_id, code: r.code, seed: r.seed, values: JSON.parse(r.param_values), width: r.width, height: r.height,
   url: `/api/outputs/${r.id}/image`, favorite: !!r.favorite, createdAt: r.created_at,
 });
 
@@ -116,12 +116,12 @@ app.post("/outputs", async (c) => {
   const key = `${user}/${meta.sketchId}/${id}.png`;
   await c.env.BUCKET.put(key, image.stream(), { httpMetadata: { contentType: "image/png" } });
   const row: OutputRow = {
-    id, sketch_id: meta.sketchId, seed: String(meta.seed), param_values: JSON.stringify(meta.values ?? {}),
+    id, sketch_id: meta.sketchId, code: String(meta.code ?? ""), seed: String(meta.seed), param_values: JSON.stringify(meta.values ?? {}),
     width: meta.width | 0, height: meta.height | 0, favorite: 0, created_at: Date.now(),
   };
   await c.env.DB.prepare(
     "INSERT INTO outputs (id, sketch_id, user_id, code, seed, param_values, width, height, r2_key, favorite, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
-  ).bind(id, row.sketch_id, user, String(meta.code ?? ""), row.seed, row.param_values, row.width, row.height, key, row.created_at).run();
+  ).bind(id, row.sketch_id, user, row.code, row.seed, row.param_values, row.width, row.height, key, row.created_at).run();
   return c.json(toOutput(row));
 });
 
