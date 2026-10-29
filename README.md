@@ -72,3 +72,7 @@ Animate with `$genart.setUpdate((timeMs, frame) => { …; return true; })`.
   can still hang the sketch frame until the watchdog tears it down.
 - High-res export waits ~400 ms after params resolve; very slow sketches may capture early.
 - Single user behind Cloudflare Access. Going public needs real auth (Better Auth), quotas and moderation.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
