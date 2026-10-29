@@ -5,6 +5,7 @@ import { z } from "zod";
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL, modelSees, type ChatBody } from "../shared/types";
 import { LOOK_TOOL, liftImages } from "../shared/chatImages";
 import { LESSONS, searchLessons } from "../shared/lessons";
+import { rankReference } from "../shared/reference";
 
 const SYSTEM = `You are the studio assistant in "Art Lab", a personal algorithmic art lab.
 The user is a beginner at generative art. Be a patient, encouraging teacher:
@@ -46,7 +47,7 @@ Match the current sketch's engine unless the user asks to switch.
   The user reviews a diff and accepts or rejects it. Never paste whole sketches in chat instead.
 - create_sketch: for a brand-new sketch from a description, keeping the current one. Write a complete, working sketch.
 - set_params: to try new parameter values without changing code.
-- search_lessons: find the relevant part of the built-in course, then point the user to it by lesson title.
+- search_lessons: find the relevant part of the built-in course and API reference, then point the user to the lesson title or the Reference (Learn tab → Reference).
 
 Available lessons: ${LESSONS.map((l) => `${l.id} "${l.title}"`).join(", ")}.`;
 
@@ -110,9 +111,12 @@ export class ChatAgent extends AIChatAgent<Env> {
           inputSchema: z.object({ values: z.record(z.string(), z.unknown()) }),
         }),
         search_lessons: tool({
-          description: "Search the built-in generative art course for explanations and examples.",
+          description: "Search the built-in generative art course and the API reference (lab.*, $genart.*, canvas, p5) for explanations and examples.",
           inputSchema: z.object({ query: z.string() }),
-          execute: async ({ query }) => searchLessons(query),
+          execute: async ({ query }) => ({
+            lessons: searchLessons(query),
+            reference: rankReference(query).map((e) => ({ sig: e.sig, summary: e.summary, returns: e.returns, example: e.example })),
+          }),
         }),
         // Runs in the browser, which replies with { image: dataUrl } (see liftImages).
         ...(vision ? {

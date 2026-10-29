@@ -306,7 +306,7 @@ function StudioInner(props: { initial: Sketch; userId: string; desktop: boolean;
           <div className="tabs" role="tablist">
             {(["tweak", "chat", "lesson", "saved"] as const).map((t) => (
               <button key={t} role="tab" aria-selected={side === t} className={side === t ? "on" : ""} onClick={() => setSide(t)}>
-                {t === "tweak" ? "Tweak" : t === "chat" ? "Assistant" : t === "lesson" ? "Lesson" : "Saved"}
+                {t === "tweak" ? "Tweak" : t === "chat" ? "Assistant" : t === "lesson" ? "Learn" : "Saved"}
               </button>
             ))}
           </div>

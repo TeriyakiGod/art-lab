@@ -86,6 +86,10 @@ Helpers: `lab.noise2D`, `lab.noise3D`, `lab.random`, `lab.pick`, `lab.gaussian`,
 values as `$palette`, so outputs and variations keep it).
 Animate with `$genart.setUpdate((timeMs, frame) => { …; return true; })`.
 
+The full API reference lives in [`shared/reference.ts`](shared/reference.ts). The app shows it at
+`#/reference` and in the studio's **Learn → Reference** tab, and the editor uses it for
+autocomplete (`lab.`, `$genart.`, `ctx.`) and hover docs.
+
 ### p5.js sketches
 
 Pick **p5.js** in the studio's engine menu (or start from the *Noise waves* template) and write

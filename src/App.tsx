@@ -5,6 +5,7 @@ import { pullPalettes, pushPalettes } from "./lib/palettes";
 import { Gallery } from "./ui/Gallery";
 import { Home } from "./ui/Home";
 import { LessonList, LessonPage } from "./ui/Learn";
+import { ReferencePage } from "./ui/Reference";
 import { Studio, type StudioTab } from "./ui/Studio";
 
 const subscribeHash = (cb: () => void) => (window.addEventListener("hashchange", cb), () => window.removeEventListener("hashchange", cb));
@@ -82,6 +83,7 @@ export function App() {
   else if (route === "learn" && param) page = <LessonPage id={param} done={done} onComplete={completeLesson} />;
   else if (route === "learn") page = <LessonList done={done} />;
   else if (route === "gallery") page = <Gallery />;
+  else if (route === "reference") page = <ReferencePage focus={param ? decodeURIComponent(param) : undefined} />;
   else page = <Home done={done} />;
 
   return (
@@ -92,6 +94,7 @@ export function App() {
           <a href="#/" className={!route ? "on" : ""}>Sketches</a>
           <a href="#/gallery" className={route === "gallery" ? "on" : ""}>Gallery</a>
           <a href="#/learn" className={route === "learn" ? "on" : ""}>Learn</a>
+          <a href="#/reference" className={route === "reference" ? "on" : ""}>Reference</a>
         </nav>
         {!online && <span className="badge">offline</span>}
       </header>
@@ -101,7 +104,7 @@ export function App() {
           {(["canvas", "tweak", "code", "lesson", "chat"] as const).map((t) => (
             <button key={t} className={tab === t ? "on" : ""} aria-current={tab === t} onClick={() => setTab(t)}>
               <NavIcon tab={t} />
-              {t === "canvas" ? "Canvas" : t === "tweak" ? "Tweak" : t === "code" ? "Code" : t === "lesson" ? "Lesson" : "Assistant"}
+              {t === "canvas" ? "Canvas" : t === "tweak" ? "Tweak" : t === "code" ? "Code" : t === "lesson" ? "Learn" : "Assistant"}
             </button>
           ))}
         </nav>
