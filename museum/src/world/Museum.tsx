@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { PCFShadowMap, WebGPURenderer } from "three/webgpu";
+import { NeutralToneMapping, PCFShadowMap, WebGPURenderer } from "three/webgpu";
 import { Fog, type WebGLRenderer } from "three";
 import type { FloorPlan } from "../../../shared/museum/generate";
 import type { Exhibit } from "../../../shared/museum/manifest";
@@ -10,6 +10,7 @@ import { Building } from "./Building";
 import { Atrium } from "./Atrium";
 import { Lighting } from "./Lighting";
 import { Effects } from "./Effects";
+import { AdaptiveResolution } from "./AdaptiveResolution";
 import { Props } from "../props/Props";
 import { Player } from "../engine/Player";
 import { attachInput, clearInput } from "../engine/input";
@@ -70,12 +71,14 @@ export default function Museum({ plan, props, exhibits, start }: Props_) {
       // Remounted when quality changes: shadow support is baked into every material.
       key={quality}
       camera={{ fov: 70, near: 0.05, far: 200 }}
-      dpr={quality === "high" ? [1, 2] : 1}
+      dpr={quality === "high" ? Math.min(1.5, window.devicePixelRatio) : 1}
       // WebGPU where the browser has it; three falls back to WebGL2 by itself.
       gl={async (glProps) => {
         const renderer = new WebGPURenderer({ ...(glProps as object), antialias: quality === "high" });
         renderer.shadowMap.enabled = quality === "high";
         renderer.shadowMap.type = PCFShadowMap;
+        // Set here too: low quality renders straight to the screen, without the effects pipeline.
+        renderer.toneMapping = NeutralToneMapping;
         await renderer.init();
         return renderer as unknown as WebGLRenderer;
       }}
@@ -100,7 +103,9 @@ export default function Museum({ plan, props, exhibits, start }: Props_) {
         const Display = DISPLAYS[exhibit.medium];
         return <Display key={slot.exhibitId} exhibit={exhibit} slot={slot} accent={accents.get(slot.exhibitId)!} />;
       })}
-      <Effects />
+      {/* Bloom and ambient occlusion cost several full-screen passes: high quality only. */}
+      {quality === "high" && <Effects />}
+      <AdaptiveResolution min={quality === "high" ? 0.75 : 0.5} max={quality === "high" ? Math.min(1.5, window.devicePixelRatio) : 1} />
     </Canvas>
   );
 }

@@ -5,8 +5,12 @@ import { ATRIUM, LEVEL_HEIGHT } from "../../../shared/museum/atrium";
 import { floorY, type FloorPlan } from "../../../shared/museum/generate";
 import { useSettings } from "../ui/settings";
 
-/** How many gallery lights follow the visitor around; more costs every pixel. */
-const ROOM_LIGHTS = 6;
+/**
+ * Every light costs every lit pixel, whether it reaches it or not, so the budget is small:
+ * low has the hemisphere, the skylight sun and one room light; high adds two more room lights and
+ * two fills under the balconies.
+ */
+const ROOM_LIGHTS = { low: 1, high: 3 } as const;
 
 /**
  * A soft studio environment for reflections: a dark room with a bright skylight overhead and a few
@@ -39,10 +43,19 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
   useEnvironment();
   const { quality } = useSettings();
   const shadows = quality === "high";
+  const roomLights = ROOM_LIGHTS[quality];
   const sun = useRef<SpotLight>(null);
   const target = useMemo(() => new Object3D(), []);
   useEffect(() => {
-    if (sun.current) sun.current.target = target;
+    const light = sun.current;
+    if (!light) return;
+    light.target = target;
+    // Nothing that casts a shadow moves, so the shadow map is drawn once (again once props and art
+    // have settled) instead of every frame.
+    light.shadow.autoUpdate = false;
+    light.shadow.needsUpdate = true;
+    const again = setTimeout(() => void (light.shadow.needsUpdate = true), 3000);
+    return () => clearTimeout(again);
   }, [target]);
 
   // Gallery lights go to the rooms nearest the camera, a few times a second.
@@ -59,7 +72,7 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
     const nearest = galleries
       .map((r) => ({ r, d: Math.hypot(r.rect.x + r.rect.w / 2 - x, r.rect.y + r.rect.d / 2 - z) + (r.level === level ? 0 : 30) }))
       .sort((a, b) => a.d - b.d)
-      .slice(0, ROOM_LIGHTS);
+      .slice(0, roomLights);
     pool.current.forEach((light, i) => {
       if (!light) return;
       const room = nearest[i]?.r;
@@ -74,7 +87,8 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
   const { rect } = ATRIUM;
   return (
     <>
-      <hemisphereLight args={["#c6cad6", "#0b0b0e", 0.9]} />
+      {/* Brighter sky light makes up for the lights low quality goes without. */}
+      <hemisphereLight args={["#c6cad6", "#0b0b0e", quality === "high" ? 0.9 : 1.4]} />
       {/* The sun through the skylight, the only light that casts shadows. */}
       <spotLight
         ref={sun}
@@ -94,13 +108,11 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
         shadow-camera-far={40}
       />
       <primitive object={target} position={[0, 0, 0]} />
-      {/* Warm light pooling under the three balconies, on the ground-floor hero walls. */}
-      {[[rect.x + 2, 4.6, 0], [rect.x + rect.w - 2, 4.6, 0], [0, 4.6, rect.y + rect.d - 2]].map(([px, py, pz], i) => (
+      {/* Warm light pooling under the east and west balconies, on the ground-floor hero walls. */}
+      {quality === "high" && [[rect.x + 2, 4.6, 0], [rect.x + rect.w - 2, 4.6, 0]].map(([px, py, pz], i) => (
         <pointLight key={i} position={[px, py, pz]} intensity={30} distance={14} decay={2} color="#ffdcb4" />
       ))}
-      {/* The water wall glows a little onto the pool and floor. */}
-      <pointLight position={[0, 2.2, ATRIUM.waterWall.z + 1.4]} intensity={12} distance={12} decay={2} color="#8fdcea" />
-      {Array.from({ length: ROOM_LIGHTS }, (_, i) => (
+      {Array.from({ length: roomLights }, (_, i) => (
         <pointLight key={`room${i}`} ref={(l) => void (pool.current[i] = l)} intensity={0} decay={2} />
       ))}
     </>
