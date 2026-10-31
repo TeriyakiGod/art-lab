@@ -1,10 +1,13 @@
 import { useMemo, useRef } from "react";
 import { BoxGeometry, Group, PlaneGeometry } from "three";
 import { useShowWhenNear } from "./nearby";
+import { hourUniform } from "./daylight";
+import { Pond } from "./Pond";
+import { Birds } from "./Birds";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { ATRIUM, LEVEL_HEIGHT, balconies, railings } from "../../../shared/museum/atrium";
 import {
-  ceilingMaterial, concreteMaterial, floorMaterial, foamMaterial, glassMaterial, lightMaterial, skylightMaterial,
+  ceilingMaterial, concreteMaterial, floorMaterial, foamMaterial, glassMaterial, lightMaterial, mistMaterial, skylightMaterial,
   steelMaterial, stoneMaterial, waterSurfaceMaterial, waterfallMaterial, woodMaterial,
 } from "./materials";
 
@@ -24,15 +27,15 @@ function Box({ x0, x1, y0, y1, z0, z1, material, cast = true, receive = true }: 
 }
 
 /** The handcrafted heart of the museum. Wings attach to its ports; this draws everything inside. */
-export function Atrium() {
+export function Atrium({ seed }: { seed: string }) {
   const group = useRef<Group>(null);
   // The atrium is room 0; from deep in a wing it isn't drawn at all.
   useShowWhenNear(group, 0);
   const m = useMemo(() => ({
-    ceiling: ceilingMaterial(), skylight: skylightMaterial(), concrete: concreteMaterial(), floor: floorMaterial("#5c5852"),
+    ceiling: ceilingMaterial(), skylight: skylightMaterial(hourUniform), concrete: concreteMaterial(), floor: floorMaterial("#5c5852"),
     glass: glassMaterial(), steel: steelMaterial(), stone: stoneMaterial(), wood: woodMaterial(),
     light: lightMaterial(2.6), softLight: lightMaterial(1.4), water: waterSurfaceMaterial(waterWall.z),
-    fall: waterfallMaterial(), foam: foamMaterial(), wetStone: concreteMaterial("#15181a"),
+    fall: waterfallMaterial(waterWall.top - pool.water), foam: foamMaterial(), mist: mistMaterial(), wetStone: concreteMaterial("#15181a"),
   }), []);
 
   const rails = useMemo(railings, []);
@@ -115,12 +118,18 @@ export function Atrium() {
       <mesh position={[(pool.x0 + pool.x1) / 2, pool.water, (pool.z0 + pool.z1) / 2]} rotation={[-Math.PI / 2, 0, 0]} material={m.water} receiveShadow>
         <planeGeometry args={[pool.x1 - pool.x0, pool.z1 - pool.z0, 1, 1]} />
       </mesh>
-      <mesh position={[0, pool.water + 0.01, waterWall.z + 0.9]} rotation={[-Math.PI / 2, 0, 0]} material={m.foam}>
-        <planeGeometry args={[waterWall.x1 - waterWall.x0 + 0.4, 1.6]} />
+      <mesh position={[0, pool.water + 0.01, waterWall.z + 1.1]} rotation={[-Math.PI / 2, 0, 0]} material={m.foam}>
+        <planeGeometry args={[waterWall.x1 - waterWall.x0 + 0.4, 2]} />
+      </mesh>
+      <mesh position={[0, pool.water + 1.1, waterWall.z + 0.5]} material={m.mist}>
+        <planeGeometry args={[waterWall.x1 - waterWall.x0 + 1.2, 2.2]} />
       </mesh>
       <mesh position={[(pool.x0 + pool.x1) / 2, pool.rim - 0.03, pool.z1 + 0.37]} material={m.softLight}>
         <boxGeometry args={[pool.x1 - pool.x0 + 0.7, 0.02, 0.02]} />
       </mesh>
+
+      <Pond seed={seed} />
+      <Birds seed={seed} />
 
       <RigidBody type="fixed" colliders={false}>
         {decks.map((d, i) => (

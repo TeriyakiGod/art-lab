@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { CanvasTexture, Color, EquirectangularReflectionMapping, Object3D, SRGBColorSpace, type PointLight, type SpotLight } from "three";
+import { CanvasTexture, Color, EquirectangularReflectionMapping, Object3D, SRGBColorSpace, type HemisphereLight, type PointLight, type SpotLight } from "three";
+import { hourUniform, localHour, sunlight } from "./daylight";
 import { ATRIUM, LEVEL_HEIGHT } from "../../../shared/museum/atrium";
 import { floorY, type FloorPlan } from "../../../shared/museum/generate";
 import { useSettings } from "../ui/settings";
@@ -43,6 +44,24 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
   useEnvironment();
   const { quality } = useSettings();
   const shadows = quality === "high";
+  // The sun follows the visitor's clock, checked every half minute.
+  const hemi = useRef<HemisphereLight>(null);
+  useEffect(() => {
+    const update = () => {
+      const h = localHour();
+      hourUniform.value = h;
+      const s = sunlight(h);
+      if (sun.current) {
+        sun.current.color.copy(s.color);
+        sun.current.intensity = s.intensity;
+        sun.current.shadow.needsUpdate = true;
+      }
+      if (hemi.current) hemi.current.intensity = (quality === "high" ? 0.9 : 1.4) * s.sky;
+    };
+    update();
+    const id = setInterval(update, 30_000);
+    return () => clearInterval(id);
+  }, [quality]);
   const roomLights = ROOM_LIGHTS[quality];
   const sun = useRef<SpotLight>(null);
   const target = useMemo(() => new Object3D(), []);
@@ -88,7 +107,7 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
   return (
     <>
       {/* Brighter sky light makes up for the lights low quality goes without. */}
-      <hemisphereLight args={["#c6cad6", "#0b0b0e", quality === "high" ? 0.9 : 1.4]} />
+      <hemisphereLight ref={hemi} args={["#c6cad6", "#0b0b0e", quality === "high" ? 0.9 : 1.4]} />
       {/* The sun through the skylight, the only light that casts shadows. */}
       <spotLight
         ref={sun}

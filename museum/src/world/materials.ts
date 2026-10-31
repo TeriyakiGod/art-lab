@@ -7,6 +7,7 @@ import {
   smoothstep, texture, time, uniform, uv, vec2, vec3, vertexColor,
 } from "three/tsl";
 import { rng } from "../../../shared/museum/rng";
+import type { hourUniform } from "./daylight";
 
 /**
  * Every surface in the museum, procedural so nothing has to be downloaded. Built once and shared.
@@ -168,7 +169,8 @@ export function vertexColorMaterial(roughness = 0.8) {
 
 /** The pool: dark water with drifting ripples, strongest where the water wall lands. */
 export function waterSurfaceMaterial(wallZ: number) {
-  const m = new MeshStandardNodeMaterial({ color: "#03161b", roughness: 0.03, metalness: 0.15 });
+  // Partly see-through, so the koi show beneath the reflections.
+  const m = new MeshStandardNodeMaterial({ color: "#062a30", roughness: 0.03, metalness: 0.1, transparent: true, opacity: 0.7, depthWrite: false });
   const p = positionWorld;
   const fromWall = p.z.sub(wallZ);
   // Two layers of the cloud noise drifting past each other read as moving water.
@@ -179,40 +181,93 @@ export function waterSurfaceMaterial(wallZ: number) {
   return m;
 }
 
-/** The falling sheet: bright streaks rushing down over the dark wall, thinning out toward the edges. */
-export function waterfallMaterial() {
-  const m = new MeshStandardNodeMaterial({ color: "#9fd8e0", roughness: 0.08, transparent: true, depthWrite: false });
+/**
+ * The falling sheet. Water leaves the lip as a smooth glassy sheet, then breaks into streaks that
+ * speed up as they fall: each point shows the water that left the lip t_fall = sqrt(2d/g) ago, so
+ * features accelerate and stretch toward the bottom like real falling water.
+ */
+export function waterfallMaterial(height: number) {
+  const m = new MeshStandardNodeMaterial({ color: "#9fd8e0", roughness: 0.06, transparent: true, depthWrite: false });
   const st = uv();
+  const fallen = st.y.oneMinus().mul(height); // meters below the lip (uv.y is 1 at the top)
+  const tFall = fallen.mul(2 / 9.81).sqrt();
+  const emitted = time.sub(tFall); // when the water here left the lip
   const flow = Fn(() => {
-    const fast = noise(vec2(st.x.mul(2.2), st.y.mul(0.16).add(time.mul(0.075)))).g;
-    const slow = noise(vec2(st.x.mul(1.1), st.y.mul(0.12).add(time.mul(0.03)))).a;
-    return smoothstep(0.3, 0.75, fast.mul(0.65).add(slow.mul(0.35)));
+    const fast = noise(vec2(st.x.mul(5.5), emitted.mul(0.9))).g;
+    const slow = noise(vec2(st.x.mul(1.8), emitted.mul(0.35))).a;
+    return smoothstep(0.32, 0.78, fast.mul(0.6).add(slow.mul(0.4)));
   })();
-  const edges = smoothstep(0, 0.04, st.x).mul(smoothstep(0, 0.04, st.x.oneMinus()));
-  m.emissiveNode = color("#7fd3e2").mul(flow.mul(0.7).add(smoothstep(0.93, 1, st.y).mul(1.5)));
-  m.opacityNode = flow.mul(0.5).add(0.18).mul(edges);
+  // Smooth near the lip, broken up further down.
+  const broken = smoothstep(0, 2.5, fallen);
+  const sheet = mix(float(0.55), flow, broken);
+  const edges = smoothstep(0, 0.03, st.x).mul(smoothstep(0, 0.03, st.x.oneMinus()));
+  const lip = smoothstep(0.985, 1, st.y);
+  m.emissiveNode = color("#7fd3e2").mul(sheet.mul(0.75).add(lip.mul(1.6)));
+  m.opacityNode = sheet.mul(0.5).add(0.16).mul(edges);
   return m;
 }
 
-/** White water where the sheet hits the pool. */
+/** Spray where the sheet lands: soft billowing white, rising and fading. */
+export function mistMaterial() {
+  const m = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
+  const st = uv();
+  const n = noise(vec2(st.x.mul(1.4).add(time.mul(0.02)), st.y.mul(0.5).sub(time.mul(0.06)))).r;
+  m.colorNode = vec3(0.75, 0.92, 1);
+  const fadeUp = st.y.oneMinus().pow(2);
+  const sides = smoothstep(0, 0.15, st.x).mul(smoothstep(0, 0.15, st.x.oneMinus()));
+  m.opacityNode = smoothstep(0.35, 0.8, n).mul(fadeUp).mul(sides).mul(0.35);
+  return m;
+}
+
+/**
+ * White water where the sheet hits the pool, pushed out across the surface. The plane lies flat with
+ * its uv top edge against the wall, so the pattern flows toward lower v (away from the wall) and is
+ * thickest at the impact line.
+ */
 export function foamMaterial() {
   const m = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
   const st = uv();
-  const n = noise(vec2(st.x.mul(2), st.y.mul(0.4).sub(time.mul(0.1)))).g;
+  const n = noise(vec2(st.x.mul(2), st.y.mul(0.4).add(time.mul(0.12)))).g;
+  const churn = noise(vec2(st.x.mul(3.5).sub(time.mul(0.03)), st.y.mul(0.9).add(time.mul(0.2)))).b;
   m.colorNode = vec3(0.8, 0.95, 1);
-  m.opacityNode = smoothstep(0.25, 0.85, n).mul(st.y.oneMinus().pow(1.5)).mul(0.45);
+  m.opacityNode = smoothstep(0.3, 0.85, n.mul(0.6).add(churn.mul(0.4))).mul(st.y.pow(2)).mul(0.6);
   return m;
 }
 
-/** The skylight: a bright field with a fine mullion grid, bright enough to bloom. */
-export function skylightMaterial() {
+/**
+ * The skylight: the real sky for the visitor's time of day behind a fine mullion grid. Blue with
+ * drifting clouds by day, warm at sunrise and sunset, deep blue with twinkling stars at night.
+ * `hour` is a uniform (0–24) updated from the clock.
+ */
+export function skylightMaterial(hour: typeof hourUniform) {
   const m = new MeshBasicNodeMaterial({ toneMapped: false });
   m.colorNode = Fn(() => {
-    const g = fract(uv().mul(vec2(8, 10)));
+    const st = uv();
+    const h = hour;
+    const day = smoothstep(5, 8, h).mul(smoothstep(18, 21, h).oneMinus());
+    const gold = max(float(1).sub(abs(h.sub(6.8)).div(1.3)), float(1).sub(abs(h.sub(19.2)).div(1.3))).clamp(0, 1);
+    // Looking straight up: zenith in the middle, a little lighter toward the frame.
+    const edge = abs(st.sub(0.5)).length().mul(1.4);
+    // At sunrise and sunset the zenith deepens to violet and the frame glows orange.
+    const zenith = mix(mix(vec3(0.01, 0.015, 0.05), vec3(0.18, 0.42, 0.85), day), vec3(0.17, 0.12, 0.34), gold.mul(0.75));
+    const rim = mix(mix(vec3(0.03, 0.04, 0.1), vec3(0.55, 0.75, 0.95), day), vec3(1, 0.45, 0.18), gold.mul(0.8));
+    let sky = mix(zenith, rim, edge);
+    // Clouds: two layers of the cloud noise drifting slowly; lit white by day, dark against the stars at night.
+    const c1 = noise(st.mul(0.55).add(vec2(time.mul(0.0025), time.mul(0.001)))).r;
+    const c2 = noise(st.mul(1.3).add(vec2(time.mul(0.004), time.mul(-0.002)))).r;
+    const cloud = smoothstep(0.5, 0.78, c1.mul(0.7).add(c2.mul(0.3)));
+    const cloudColor = mix(mix(vec3(0.05, 0.06, 0.09), vec3(1.05, 1.05, 1.08), day), vec3(1, 0.5, 0.42), gold.mul(0.7));
+    sky = mix(sky, cloudColor, cloud.mul(0.85));
+    // Stars: the finest noise channel's brightest specks, twinkling, only at night and not behind clouds.
+    const speck = noise(st.mul(3.1)).b;
+    const twinkle = sin(time.mul(2.3).add(speck.mul(90))).mul(0.35).add(0.65);
+    const stars = smoothstep(0.93, 0.97, speck).mul(twinkle).mul(day.oneMinus()).mul(cloud.oneMinus());
+    sky = sky.add(vec3(stars.mul(1.4)));
+    // Bright enough by day to bloom and read as light pouring in.
+    const lit = sky.mul(mix(float(1), float(1.7), day)).mul(gold.mul(-0.3).add(1));
+    const g = fract(st.mul(vec2(8, 10)));
     const line = min(min(g.x, g.x.oneMinus()), min(g.y, g.y.oneMinus()));
-    const lit = smoothstep(0.015, 0.04, line);
-    const glow = float(1).sub(abs(uv().sub(0.5)).length().mul(0.6));
-    return mix(vec3(0.05, 0.05, 0.06), vec3(2.1, 2.2, 2.4).mul(glow), lit);
+    return mix(vec3(0.03, 0.03, 0.035), lit, smoothstep(0.015, 0.04, line));
   })();
   return m;
 }

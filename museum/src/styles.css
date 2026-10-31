@@ -58,3 +58,7 @@ code { font-family: var(--mono); font-size: 0.9em; }
 @media (max-width: 600px) {
   .focus { top: auto; height: 55%; }
 }
+
+.crosshair-key { position: fixed; left: 50%; top: calc(50% + 14px); transform: translateX(-50%); font-size: 0.65rem; color: #fff; pointer-events: none; }
+.hints { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; gap: 18px; padding: 8px 18px; background: rgb(14 14 18 / 0.6); border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(8px); font-size: 0.8rem; color: #c9c8d2; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; }
+.hints kbd { margin-right: 4px; }

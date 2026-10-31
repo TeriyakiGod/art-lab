@@ -10,7 +10,10 @@ type Props = { manifest: Manifest | null; error: boolean; exhibits: Map<string, 
 
 const isTouch = () => matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches;
 
-/** Everything drawn over the 3D view: start screen, crosshair, the label of the work you're facing, focus panel. */
+/**
+ * Everything drawn over the 3D view: the start screen, the crosshair, and slim key hints. The art's
+ * own information is on its plaque, on the wall.
+ */
 export function Overlay({ manifest, error, exhibits }: Props) {
   const walking = useUi((s) => s.walking);
   const hovered = useUi((s) => s.hovered);
@@ -24,12 +27,14 @@ export function Overlay({ manifest, error, exhibits }: Props) {
     const onKey = (e: KeyboardEvent) => {
       const s = ui.get();
       if (e.code === "KeyE") {
-        if (s.focused) { unfocus(); lockPointer(); }
+        if (s.focused) { unfocus(); if (!s.walking) lockPointer(); }
         else if (s.seated !== null) ui.set({ seated: null });
-        else if (s.walking && s.hovered) { ui.set({ focused: s.hovered }); void document.exitPointerLock(); }
+        else if (s.walking && s.hovered) ui.set({ focused: s.hovered });
         else if (s.walking && s.hoveredSeat !== null) ui.set({ seated: s.hoveredSeat });
-      } else if (e.code === "Escape" && s.focused) unfocus();
-      else if (e.code === "KeyR" && s.focused && exhibits.get(s.focused)?.live) live.reroll(s.focused);
+      } else if (e.code === "Escape" && s.focused && !s.walking) unfocus();
+      else if (s.focused && exhibits.get(s.focused)?.live && e.code === "KeyR") live.reroll(s.focused);
+      else if (s.focused && e.code === "KeyO") live.original(s.focused);
+      else if (s.focused && e.code === "KeyC") copyLink();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -39,24 +44,18 @@ export function Overlay({ manifest, error, exhibits }: Props) {
   useLive();
   const reroll = focused ? live.rerolled(focused) : undefined;
   useEffect(() => {
-    if (manifest) history.replaceState(null, "", focused ? `#/w/${focused}${reroll ? `/${reroll}` : ""}` : location.pathname);
+    if (manifest) history.replaceState(null, "", `${location.pathname}${location.search}${focused ? `#/w/${focused}${reroll ? `/${reroll}` : ""}` : ""}`);
   }, [focused, reroll, manifest]);
 
-  const work = focused ? exhibits.get(focused) : hovered ? exhibits.get(hovered) : undefined;
+  const work = focused ? exhibits.get(focused) : undefined;
 
-  if (focused && work) return <FocusPanel exhibit={work} />;
+  if (focused && work) return <FocusHints exhibit={work} walking={walking} />;
   if (walking) {
     return (
       <>
         <div className={`crosshair ${hovered || hoveredSeat !== null ? "on" : ""} ${seated !== null ? "hidden" : ""}`} />
-        {work && (
-          <div className="label">
-            <strong>{work.title}</strong>
-            <span>{work.wing} · {work.size.w} × {work.size.h} m</span>
-            <kbd>E</kbd> <span className="hint">look closer</span>
-          </div>
-        )}
-        {!work && hoveredSeat !== null && (
+        {hovered && <kbd className="crosshair-key">E</kbd>}
+        {!hovered && hoveredSeat !== null && (
           <div className="label">
             <strong>Bench</strong>
             <kbd>E</kbd> <span className="hint">sit</span>
@@ -102,6 +101,7 @@ export function Overlay({ manifest, error, exhibits }: Props) {
               <dt>Shift</dt><dd>walk faster</dd>
               <dt>Mouse</dt><dd>look around</dd>
               <dt>E / click</dt><dd>look closer at a work</dd>
+              <dt>R</dt><dd>re-roll a live work, up close</dd>
               <dt>E</dt><dd>sit on a bench</dd>
               <dt>Esc</dt><dd>pause</dd>
             </dl>
@@ -120,55 +120,31 @@ export function Overlay({ manifest, error, exhibits }: Props) {
 
 const unfocus = () => ui.set({ focused: null });
 
-function FocusPanel({ exhibit }: { exhibit: Exhibit }) {
+let copiedListener: ((on: boolean) => void) | null = null;
+function copyLink() {
+  void navigator.clipboard.writeText(location.href).then(() => {
+    copiedListener?.(true);
+    setTimeout(() => copiedListener?.(false), 1500);
+  });
+}
+
+/** While looking closely: what the keys do, and the re-roll's state. Everything else is on the plaque. */
+function FocusHints({ exhibit, walking }: { exhibit: Exhibit; walking: boolean }) {
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    copiedListener = setCopied;
+    return () => void (copiedListener = null);
+  }, []);
   useLive();
   const rerolled = live.rerolled(exhibit.id);
   const status = live.status(exhibit.id);
-  const copy = () => {
-    void navigator.clipboard.writeText(location.href).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
   return (
-    <aside className="focus">
-      <p className="eyebrow">{exhibit.wing}</p>
-      <h2>{exhibit.title}</h2>
-      {exhibit.statement && <p className="statement">{exhibit.statement}</p>}
-      <dl className="facts">
-        <dt>Seed</dt>
-        <dd>
-          <code>{rerolled ?? exhibit.seed}</code>
-          {rerolled && <span className="muted small"> · your re-roll{status === "loading" ? ", rendering…" : ""}</span>}
-          {status === "error" && <span className="muted small"> · couldn't run live</span>}
-        </dd>
-        <dt>Size</dt><dd>{exhibit.size.w} × {exhibit.size.h} m</dd>
-        <dt>Engine</dt><dd>{exhibit.engine === "p5" ? "p5.js" : "Canvas"}</dd>
-        <dt>Added</dt><dd>{new Date(exhibit.createdAt).toLocaleDateString()}</dd>
-      </dl>
-      {exhibit.palette.length > 0 && (
-        <div className="palette" aria-label="Palette">
-          {exhibit.palette.map((c) => <span key={c} style={{ background: c }} title={c} />)}
-        </div>
-      )}
-      {exhibit.live ? (
-        <div className="reroll">
-          <p className="muted small">
-            This work is a program. Run it with a new seed to see a version nobody has seen before.
-          </p>
-          <div className="actions">
-            <button onClick={() => live.reroll(exhibit.id)}>Re-roll <kbd>R</kbd></button>
-            {rerolled && <button onClick={() => live.original(exhibit.id)}>Show original</button>}
-          </div>
-        </div>
-      ) : (
-        <p className="muted small">The artist keeps this work's code private, so it can't be re-rolled.</p>
-      )}
-      <div className="actions bottom">
-        <button className="enter" onClick={() => { unfocus(); if (settings.get().sound) ambience.start(); lockPointer(); }}>Back to walking <kbd>E</kbd></button>
-        <button onClick={copy}>{copied ? "Link copied" : "Copy link"}</button>
-      </div>
-    </aside>
+    <div className="hints" role="status">
+      {exhibit.live && <span><kbd>R</kbd> re-roll{rerolled && status === "loading" ? " (rendering…)" : ""}</span>}
+      {rerolled && <span><kbd>O</kbd> original</span>}
+      {status === "error" && <span className="muted">couldn't run live</span>}
+      <span><kbd>C</kbd> {copied ? "link copied" : "copy link"}</span>
+      <span>{walking ? <><kbd>E</kbd> back to walking</> : "click to explore the museum"}</span>
+    </div>
   );
 }

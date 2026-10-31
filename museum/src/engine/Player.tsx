@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody, useBeforePhysicsStep, useRapier, type RapierRigidBody } from "@react-three/rapier";
 import type { Collider, KinematicCharacterController } from "@dimforge/rapier3d-compat";
-import { Group, Raycaster, Vector2, Vector3, type Object3D } from "three";
+import { Group, Raycaster, Vector2, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import type { Entity } from "koota";
 import { EYE_HEIGHT, type FloorPlan } from "../../../shared/museum/generate";
-import { viewpoint } from "../../../shared/museum/floorplan";
+import { focusFrame } from "../art/plaque";
 import { BENCH_DEPTH, SEAT_HEIGHT, type Prop } from "../../../shared/museum/props";
 import { IsLocal, Look, Position, world } from "./ecs";
 import { LOOK_SENSITIVITY, readIntent, takeLook } from "./input";
@@ -98,6 +98,8 @@ export function Player({ plan, benches, net, start }: Props) {
   /** `turned` once the view has swung round to the seat's direction; then the mouse is free. */
   const sitting = useRef<{ bench: number; pose: ReturnType<typeof seatPose>; turned: boolean } | null>(null);
   const sitBlend = useRef(0);
+  const focusBlend = useRef(0);
+  const focusEye = useMemo(() => new Vector3(), []);
 
   // Fixed 60 Hz simulation step: the same shape a networked game needs (plan §6).
   useBeforePhysicsStep((w) => {
@@ -114,14 +116,14 @@ export function Player({ plan, benches, net, start }: Props) {
       b.setNextKinematicTranslation({ x: p.x, y: p.y + CENTER, z: p.z });
       entity.set(Look, { yaw: p.yaw, pitch: p.pitch });
     } else if (focused) {
-      // Glide to the viewing spot in front of the work, ignoring walls (it's in the same room).
+      // Glide to the spot square in front of the work, ignoring walls (it's in the same room); the
+      // camera's height is handled per frame, below.
       const slot = plan.slots.find((s) => s.exhibitId === focused);
       if (slot) {
-        const v = viewpoint(slot);
+        const f = focusFrame(slot, (camera as PerspectiveCamera).fov, (camera as PerspectiveCamera).aspect);
         const k = 1 - Math.exp(-dt * 4);
-        b.setNextKinematicTranslation({ x: t.x + (v.x - t.x) * k, y: t.y + (v.y + CENTER - t.y) * k, z: t.z + (v.z - t.z) * k });
-        const pitch = Math.atan2(slot.y - (v.y + EYE_HEIGHT), v.distance);
-        entity.set(Look, { yaw: angleLerp(look.yaw, v.yaw, k), pitch: look.pitch + (pitch - look.pitch) * k });
+        b.setNextKinematicTranslation({ x: t.x + (f.x - t.x) * k, y: t.y + (f.floor + CENTER - t.y) * k, z: t.z + (f.z - t.z) * k });
+        entity.set(Look, { yaw: angleLerp(look.yaw, f.yaw, k), pitch: look.pitch * (1 - k) });
       }
       velocity.current = { x: 0, y: 0, z: 0 };
     } else if (seated !== null) {
@@ -196,6 +198,14 @@ export function Player({ plan, benches, net, start }: Props) {
     eye.current!.getWorldPosition(eyePos);
     sitBlend.current = Math.max(0, Math.min(1, sitBlend.current + (seated !== null && sitting.current ? delta : -delta) * 1.8));
     if (sitting.current && sitBlend.current > 0) eyePos.lerp(sitting.current.pose.eye, smooth(sitBlend.current));
+    // Looking closely: the camera rises or sinks to the middle of the work and its plaque.
+    const slot = focused ? plan.slots.find((s) => s.exhibitId === focused) : undefined;
+    focusBlend.current = Math.max(0, Math.min(1, focusBlend.current + (slot ? delta : -delta) * 1.2));
+    if (slot) {
+      const f = focusFrame(slot, (camera as PerspectiveCamera).fov, (camera as PerspectiveCamera).aspect);
+      focusEye.set(eyePos.x, f.eyeY, eyePos.z);
+    }
+    if (focusBlend.current > 0) eyePos.y += (focusEye.y - eyePos.y) * smooth(focusBlend.current);
     const look = entity.get(Look)!;
     camera.position.copy(eyePos);
     camera.rotation.set(look.pitch, look.yaw, 0, "YXZ");

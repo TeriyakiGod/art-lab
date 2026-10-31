@@ -61,7 +61,7 @@ export function App() {
     <>
       {plan && start && (
         <Suspense fallback={null}>
-          <Museum plan={plan} props={props} exhibits={exhibits} start={start} />
+          <Museum plan={plan} props={props} seed={manifest!.layoutSeed} exhibits={exhibits} start={start} />
         </Suspense>
       )}
       <Overlay manifest={manifest} error={error} exhibits={exhibits} />

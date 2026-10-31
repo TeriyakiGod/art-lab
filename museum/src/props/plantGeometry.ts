@@ -184,14 +184,18 @@ export function planter(b: MeshBuilder, at: Vector3, r: number) {
   }
 }
 
-/** A branching tree grown by recursion: bark into `bark`, leaf clusters into `leaves`. */
-export function growTree(leaves: MeshBuilder, bark: MeshBuilder, at: Vector3, height: number, seed: number) {
+/**
+ * A branching tree grown by recursion: bark into `bark`, leaf clusters into `leaves`. Outer branch
+ * tips go into `perches`, for birds.
+ */
+export function growTree(leaves: MeshBuilder, bark: MeshBuilder, at: Vector3, height: number, seed: number, perches?: Vector3[]) {
   const r = rng(seed);
   const barkCol = new Color("#4a3f36");
   const scale = height / 9.5;
   const branch = (start: Vector3, dir: Vector3, length: number, radius: number, depth: number) => {
     const end = start.clone().addScaledVector(dir, length);
     tube(bark, start, end, radius, radius * 0.7, barkCol);
+    if (depth === 1 || depth === 2) perches?.push(end.clone());
     if (depth === 0 || radius < 0.02) {
       const n = 50 + Math.floor(r() * 25);
       for (let i = 0; i < n; i++) {

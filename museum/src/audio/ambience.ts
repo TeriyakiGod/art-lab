@@ -10,6 +10,7 @@ class Ambience {
 
   /** Must run inside a click or key press, like everything that starts audio. */
   start() {
+    this.on = true;
     if (this.ctx) {
       void this.ctx.resume();
       this.fade(1);
@@ -60,6 +61,58 @@ class Ambience {
 
   stop() {
     this.fade(0);
+    this.on = false;
+  }
+
+  private on = false;
+
+  /** A short positioned sound, built from oscillators; nothing plays unless sound is on. */
+  private voice(x: number, y: number, z: number, build: (ctx: AudioContext, out: AudioNode, t: number) => void) {
+    if (!this.ctx || !this.master || !this.on) return;
+    const panner = new PannerNode(this.ctx, { panningModel: "HRTF", distanceModel: "inverse", refDistance: 2, rolloffFactor: 1.4, positionX: x, positionY: y, positionZ: z });
+    panner.connect(this.master);
+    build(this.ctx, panner, this.ctx.currentTime);
+    setTimeout(() => panner.disconnect(), 3000);
+  }
+
+  /** A frog's two-pulse "ribbit". */
+  croak(x: number, y: number, z: number) {
+    this.voice(x, y, z, (ctx, out, t) => {
+      const band = new BiquadFilterNode(ctx, { type: "bandpass", frequency: 520, Q: 4 });
+      band.connect(out);
+      for (const start of [0, 0.22]) {
+        const o = new OscillatorNode(ctx, { type: "sawtooth", frequency: 110 });
+        const g = new GainNode(ctx, { gain: 0 });
+        g.gain.setValueAtTime(0, t + start);
+        g.gain.linearRampToValueAtTime(0.5, t + start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, t + start + 0.16);
+        o.frequency.setValueAtTime(130, t + start);
+        o.frequency.linearRampToValueAtTime(95, t + start + 0.15);
+        o.connect(g).connect(band);
+        o.start(t + start);
+        o.stop(t + start + 0.2);
+      }
+    });
+  }
+
+  /** A bird's quick rising chirps. */
+  chirp(x: number, y: number, z: number) {
+    this.voice(x, y, z, (ctx, out, t) => {
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) {
+        const s = t + i * (0.09 + Math.random() * 0.05);
+        const o = new OscillatorNode(ctx, { type: "sine", frequency: 2600 });
+        const g = new GainNode(ctx, { gain: 0 });
+        o.frequency.setValueAtTime(2400 + Math.random() * 600, s);
+        o.frequency.exponentialRampToValueAtTime(4200 + Math.random() * 900, s + 0.06);
+        g.gain.setValueAtTime(0, s);
+        g.gain.linearRampToValueAtTime(0.18, s + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, s + 0.07);
+        o.connect(g).connect(out);
+        o.start(s);
+        o.stop(s + 0.08);
+      }
+    });
   }
 
   private fade(to: number) {

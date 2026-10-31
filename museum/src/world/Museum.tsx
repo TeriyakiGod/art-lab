@@ -23,7 +23,7 @@ import { useSettings } from "../ui/settings";
 
 const BACKGROUND = "#060608";
 
-type Props_ = { plan: FloorPlan; props: Prop[]; exhibits: Map<string, Exhibit>; start: { x: number; y: number; z: number; yaw: number } };
+type Props_ = { plan: FloorPlan; props: Prop[]; seed: string; exhibits: Map<string, Exhibit>; start: { x: number; y: number; z: number; yaw: number } };
 
 /** Captures the mouse when the canvas is clicked, and mirrors pointer lock into the UI state. */
 function PointerLock() {
@@ -32,10 +32,14 @@ function PointerLock() {
     const detach = attachInput(canvas);
     const onClick = () => {
       const { focused, hovered, hoveredSeat } = ui.get();
-      if (focused) return;
+      // A click while looking closely goes back to walking.
+      if (focused) {
+        ui.set({ focused: null });
+        if (document.pointerLockElement !== canvas) void canvas.requestPointerLock();
+        return;
+      }
       if (document.pointerLockElement === canvas && hovered) {
         ui.set({ focused: hovered });
-        void document.exitPointerLock();
       } else if (document.pointerLockElement === canvas && hoveredSeat !== null) {
         ui.set({ seated: hoveredSeat });
       } else if (document.pointerLockElement !== canvas) {
@@ -60,7 +64,7 @@ function PointerLock() {
   return null;
 }
 
-export default function Museum({ plan, props, exhibits, start }: Props_) {
+export default function Museum({ plan, props, seed, exhibits, start }: Props_) {
   const net = useMemo(() => new LocalAdapter(), []);
   const fog = useMemo(() => new Fog(BACKGROUND, 26, 90), []);
   const benches = useMemo(() => seatsOf(props), [props]);
@@ -95,7 +99,7 @@ export default function Museum({ plan, props, exhibits, start }: Props_) {
       <PointerLock />
       <Physics timeStep={1 / 60} gravity={[0, -9.81, 0]}>
         <Building plan={plan} />
-        <Atrium />
+        <Atrium seed={seed} />
         <Props props={props} />
         <Player plan={plan} benches={benches} net={net} start={start} />
       </Physics>

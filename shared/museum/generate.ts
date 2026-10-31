@@ -59,6 +59,8 @@ export type WallSlot = {
   w: number; h: number;
   /** How far back a viewer can stand (balconies are shallow). */
   maxView: number;
+  /** Free wall beside the work on each side (room for its plaque). */
+  space: number;
 };
 
 /** A spot reserved on the floor for a future 3D work (plan §9). Benches use them until then. */
@@ -198,7 +200,8 @@ function hang(room: Room, runs: Run[], e: Exhibit): WallSlot | null {
         const aside = Math.abs((f.x - x) * L.dx + (f.z - z) * L.dz);
         if (ahead > 0 && aside < f.r + 0.4) maxView = Math.min(maxView, ahead - f.r - 0.45);
       }
-      return { exhibitId: e.id, room: room.id, level: run.level, w, h, y: floorY(run.level) + local, x, z, nx: L.nx, nz: L.nz, maxView };
+      const space = (k * run.pitch - w) / 2;
+      return { exhibitId: e.id, room: room.id, level: run.level, w, h, y: floorY(run.level) + local, x, z, nx: L.nx, nz: L.nz, maxView, space };
     }
   }
   return null;

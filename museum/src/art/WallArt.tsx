@@ -5,6 +5,7 @@ import type { Exhibit } from "../../../shared/museum/manifest";
 import { acquireArt, releaseArt } from "./textures";
 import { live, useLive } from "./live";
 import { useNearby } from "../world/nearby";
+import { plaqueLayout, plaqueTexture } from "./plaque";
 import { useUi } from "../ui/store";
 import { haloMaterial } from "../world/materials";
 
@@ -49,6 +50,10 @@ function ShownArt({ exhibit, slot, accent, focused }: { exhibit: Exhibit; slot: 
   }, [focused, exhibit.images]);
 
   const shown = liveTexture ?? texture;
+  const rerolled = live.rerolled(exhibit.id);
+  const plaque = useMemo(() => plaqueTexture(exhibit, rerolled), [exhibit, rerolled]);
+  useEffect(() => () => plaque.dispose(), [plaque]);
+  const label = plaqueLayout(slot);
   return (
     <group position={[slot.x, slot.y, slot.z]} rotation={[0, Math.atan2(slot.nx, slot.nz), 0]}>
       {/* A soft glow of the room's accent on the wall behind it. */}
@@ -59,6 +64,15 @@ function ShownArt({ exhibit, slot, accent, focused }: { exhibit: Exhibit; slot: 
       <mesh position={[0, 0, -0.025]}>
         <boxGeometry args={[slot.w + 0.04, slot.h + 0.04, 0.03]} />
         <meshStandardMaterial color="#050507" roughness={0.6} />
+      </mesh>
+      {/* The plaque, with a thin backing so it stands off the wall. */}
+      <mesh position={[label.x, label.y, -0.03]} userData={{ exhibitId: exhibit.id }}>
+        <boxGeometry args={[label.w + 0.01, label.h + 0.01, 0.012]} />
+        <meshStandardMaterial color="#0c0c0f" roughness={0.5} />
+      </mesh>
+      <mesh position={[label.x, label.y, -0.023]}>
+        <planeGeometry args={[label.w, label.h]} />
+        <meshBasicMaterial key={plaque.uuid} map={plaque} color="#d8d8d8" toneMapped={false} />
       </mesh>
       <mesh userData={{ exhibitId: exhibit.id }}>
         <planeGeometry args={[slot.w, slot.h]} />
