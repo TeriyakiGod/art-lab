@@ -43,11 +43,11 @@ npx wrangler r2 bucket create art-lab-outputs
 npm run db:migrate:remote
 ```
 
-1. In Zero Trust → Access → Applications, add a self-hosted app for `art.kacperochnik.eu`
+1. In Zero Trust → Access → Applications, add a self-hosted app for `lab.art.kacperochnik.eu`
    with a policy allowing your email. Copy its **Application Audience (AUD) tag** into
    `ACCESS_AUD` in `wrangler.jsonc`.
 2. AI Gateway: `AI_GATEWAY_ID` is `default`, which Cloudflare creates on the first request (logs, costs, caching, rate limits under AI → AI Gateway). Use another id to point at a gateway you made yourself.
-3. `npm run deploy`. The custom domain route creates the DNS record for `art.kacperochnik.eu`.
+3. `npm run deploy`. The custom domain route creates the DNS record and a certificate for `lab.art.kacperochnik.eu` (Universal SSL alone doesn't cover two-level subdomains; the custom domain gets its own). The public museum lives at `art.kacperochnik.eu`; see [docs/museum-plan.md](docs/museum-plan.md).
 
 ## Deploying from GitHub
 

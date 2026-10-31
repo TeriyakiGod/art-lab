@@ -8,7 +8,7 @@
   // Only reachable through the Access-protected custom domain
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "art.kacperochnik.eu", "custom_domain": true }],
+  "routes": [{ "pattern": "lab.art.kacperochnik.eu", "custom_domain": true }],
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
