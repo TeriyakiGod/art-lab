@@ -20,7 +20,7 @@ export type ExhibitBase = {
   title: string;
   statement: string;
   wing: string;
-  /** Order within the wing; only ever appended. */
+  /** Order across the whole museum (one sequence for all wings); only ever appended. */
   position: number;
   /** A candidate for an atrium. */
   hero: boolean;

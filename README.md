@@ -108,7 +108,12 @@ and the museum Worker only ever reads exhibits and that prefix.
 ```bash
 npm run dev:local                  # the lab, http://localhost:5199
 npm run dev --workspace museum     # the museum, http://localhost:5200 (shares the lab's local D1/R2)
+npm test --workspace museum        # floor-plan generator: determinism, stability, walkability
 ```
+
+The building is generated from the exhibits by `shared/museum/generate.ts` (pure and deterministic,
+so every browser builds the same museum); the museum renders it with React Three Fiber on three's
+`WebGPURenderer` (WebGL2 fallback) and walks you through it with Rapier's character controller.
 
 `.github/workflows/deploy-museum.yml` deploys it when `museum/` or `shared/` changes. Until the museum
 opens, keep `art.kacperochnik.eu` in the Access app so it stays private.

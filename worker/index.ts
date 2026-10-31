@@ -190,8 +190,12 @@ function parseExhibitInput(v: Partial<ExhibitInput>): ExhibitInput | null {
   };
 }
 
-const nextPosition = async (env: Env, wing: string) =>
-  ((await env.DB.prepare("SELECT MAX(position) AS p FROM exhibits WHERE wing = ?").bind(wing).first<{ p: number | null }>())?.p ?? -1) + 1;
+/**
+ * Positions are one sequence across all wings: the museum places works in this order, so a new
+ * work (or one moved to another wing) comes last and never moves the rooms of older ones.
+ */
+const nextPosition = async (env: Env) =>
+  ((await env.DB.prepare("SELECT MAX(position) AS p FROM exhibits").first<{ p: number | null }>())?.p ?? -1) + 1;
 
 app.get("/exhibits", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT * FROM exhibits WHERE user_id = ? ORDER BY wing, position")
@@ -224,7 +228,7 @@ app.post("/exhibits", async (c) => {
   const assets = Object.fromEntries(images.map(([s]) => [s, imageKey(id, s)]));
   const row: ExhibitRow = {
     id, output_id: meta.outputId!, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
-    size: JSON.stringify(physicalSize(output.width, output.height, input.longSide)), position: await nextPosition(c.env, input.wing), created_at: now,
+    size: JSON.stringify(physicalSize(output.width, output.height, input.longSide)), position: await nextPosition(c.env), created_at: now,
   };
   await c.env.DB.prepare(
     `INSERT INTO exhibits (id, output_id, user_id, wing, title, statement, hero, live, medium, size, assets, position, updated_at, created_at)
@@ -242,7 +246,7 @@ app.patch("/exhibits/:id", async (c) => {
   ).bind(c.req.param("id"), user).first<ExhibitRow & { width: number; height: number }>();
   if (!row) return c.notFound();
   // Moving to another wing appends there, so the new wing's existing rooms stay put.
-  const position = input.wing === row.wing ? row.position : await nextPosition(c.env, input.wing);
+  const position = input.wing === row.wing ? row.position : await nextPosition(c.env);
   const updated: ExhibitRow = {
     ...row, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
     size: JSON.stringify(physicalSize(row.width, row.height, input.longSide)), position,

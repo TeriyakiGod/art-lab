@@ -36,7 +36,7 @@ const EXHIBIT_QUERY = `SELECT e.id, e.wing, e.title, e.statement, e.hero, e.live
   o.code, o.engine, o.seed, o.param_values FROM exhibits e JOIN outputs o ON o.id = e.output_id`;
 
 app.get("/manifest", async (c) => {
-  const { results } = await c.env.DB.prepare(`${EXHIBIT_QUERY} ORDER BY e.wing, e.position`).all<Row>();
+  const { results } = await c.env.DB.prepare(`${EXHIBIT_QUERY} ORDER BY e.position`).all<Row>();
   const manifest: Manifest = {
     generatorVersion: GENERATOR_VERSION,
     layoutSeed: c.env.LAYOUT_SEED,

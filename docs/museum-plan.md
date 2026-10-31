@@ -142,15 +142,19 @@ The building lives on a 2D grid of 1 m cells (single floor at first; floors stac
 1. **Atrium** is placed at the origin. Hero works go here.
 2. **Wings** branch from the atrium's doors in a seeded order, one per `wing` value, sorted by the
    date the wing was first used (so old wings never move).
-3. For each wing, works are taken **in `position` order** and placed into the wing's current room
-   until its slots run out. Every room has two kinds of slot, from day one: **wall slots**
+3. Works are taken **in `position` order**, one sequence across all wings (a new work, or one
+   moved to another wing, gets the next number), and each goes into its wing's current room
+   until that room's slots run out. Placing one at a time across the whole museum is what keeps
+   the plan stable: a room's position only depends on rooms created before it. Every room has two kinds of slot, from day one: **wall slots**
    (measured in meters along the walls: a work needs its width plus spacing) and **floor slots**
    (round footprints in the open floor, with a walking path kept clear around them). 2D works use
    wall slots; 3D works will use floor slots. Phase 1 only fills wall slots, but rooms already
    reserve their floor zones so 3D works can arrive later without moving anything.
-4. When a room is full, the generator **grows a new room** off a free door of the wing's last
-   room: it tries room types and sizes from a seeded list, keeps the first that fits the grid
-   without overlapping anything, and connects it with a door or a corridor.
+4. When a room is full, the generator **grows a new room** off a free exit of the wing's last
+   room: it tries corridor lengths and room sizes from a seeded list, keeps the first that fits the
+   grid without touching anything and has wall space for the work that needs it, and connects it
+   with a corridor. Every room reserves its exits when it's created (blank wall until used), so a
+   doorway opening later never covers a work.
 5. Room type is chosen from what it will hold: many variations of one sketch ⇒ series room;
    one animated work ⇒ mirror room; mostly 3D works ⇒ sculpture hall; one very large 3D work ⇒
    immersive room; otherwise a gallery.

@@ -10,4 +10,6 @@ export default defineConfig({
     cloudflare({ persistState: { path: "../.wrangler/state" }, inspectorPort: 9230 }),
   ],
   server: { port: 5200 },
+  // The lazily loaded 3D scene is big by nature (three.js + Rapier's WASM); the first view stays small.
+  build: { chunkSizeWarningLimit: 4500 },
 });

@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import type { Manifest } from "../../shared/museum/manifest";
+import { generate } from "../../shared/museum/generate";
+import { viewpoint } from "../../shared/museum/floorplan";
+import { Overlay } from "./ui/Overlay";
+import { ui } from "./ui/store";
 
-/** Phase 0 placeholder: lists the collection the 3D museum will be generated from. */
+// The 3D scene (three.js, Rapier) is the heavy part; the page shows first, the museum loads after.
+const Museum = lazy(() => import("./world/Museum"));
+
+/** `#/w/<exhibitId>` opens the museum in front of that work. Read once: the overlay rewrites the hash. */
+const linkedExhibit = /^#\/w\/([\w-]+)$/.exec(location.hash)?.[1] ?? null;
+
 export function App() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [error, setError] = useState(false);
@@ -12,34 +21,24 @@ export function App() {
       .then(setManifest, () => setError(true));
   }, []);
 
-  const wings = manifest ? [...new Set(manifest.exhibits.map((e) => e.wing))] : [];
+  const plan = useMemo(() => manifest && generate(manifest), [manifest]);
+  const exhibits = useMemo(() => new Map(manifest?.exhibits.map((e) => [e.id, e])), [manifest]);
+
+  // Start in front of a linked work, focused on it; otherwise in the atrium.
+  const linkedSlot = plan?.slots.find((s) => s.exhibitId === linkedExhibit);
+  const start = useMemo(() => (plan ? (linkedSlot ? viewpoint(linkedSlot) : plan.spawn) : null), [plan, linkedSlot]);
+  useEffect(() => {
+    if (linkedSlot) ui.set({ focused: linkedSlot.exhibitId });
+  }, [linkedSlot]);
 
   return (
-    <main>
-      <header>
-        <h1>Museum</h1>
-        <p className="muted">A walkable museum of algorithmic art. The building is under construction.</p>
-      </header>
-      {error && <p className="muted">Couldn't load the collection.</p>}
-      {manifest?.exhibits.length === 0 && <p className="muted">Nothing exhibited yet.</p>}
-      {wings.map((wing) => (
-        <section key={wing}>
-          <h2>{wing}</h2>
-          <div className="grid">
-            {manifest!.exhibits.filter((e) => e.wing === wing).map((e) => (
-              <figure key={e.id}>
-                <img src={e.images["1k"]} alt={e.title} loading="lazy" />
-                <figcaption>
-                  <strong>{e.title}</strong>
-                  <span className="muted">
-                    {e.size.w} × {e.size.h} m · seed {e.seed}{e.animated ? " · animated" : ""}{e.live ? " · live" : ""}
-                  </span>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        </section>
-      ))}
-    </main>
+    <>
+      {plan && start && (
+        <Suspense fallback={null}>
+          <Museum plan={plan} exhibits={exhibits} start={start} />
+        </Suspense>
+      )}
+      <Overlay manifest={manifest} error={error} exhibits={exhibits} />
+    </>
   );
 }

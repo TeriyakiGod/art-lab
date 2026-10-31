@@ -10,20 +10,27 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "cf-typegen": "wrangler types",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.8.2",
+    "@react-three/rapier": "^2.2.0",
     "hono": "^4.13.14",
+    "koota": "^0.6.6",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.66.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
+    "vitest": "^5.0.5",
     "wrangler": "^4.155.0"
   }
 }
