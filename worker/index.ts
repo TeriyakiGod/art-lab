@@ -3,6 +3,10 @@ import { routeAgentRequest } from "agents";
 import { getUser, type User } from "./auth";
 import type { Engine, Output, Palette, Sketch, Version } from "../shared/types";
 import { MAX_PALETTE_COLORS, isHexColor } from "../shared/palettes";
+import {
+  IMAGE_SIZES, MAX_STATEMENT, cleanWing, imageKey, physicalSize,
+  type ExhibitInput, type ImageSize, type LabExhibit,
+} from "../shared/museum/manifest";
 
 export { ChatAgent } from "./agent";
 
@@ -150,8 +154,111 @@ app.delete("/outputs/:id", async (c) => {
   const row = await c.env.DB.prepare("SELECT r2_key FROM outputs WHERE id = ? AND user_id = ?")
     .bind(c.req.param("id"), user).first<{ r2_key: string }>();
   if (row) {
+    const exhibit = await c.env.DB.prepare("SELECT id FROM exhibits WHERE output_id = ?").bind(c.req.param("id")).first<{ id: string }>();
+    if (exhibit) await deleteExhibitImages(c.env, exhibit.id);
     await c.env.BUCKET.delete(row.r2_key);
+    // The exhibit row goes with it (ON DELETE CASCADE).
     await c.env.DB.prepare("DELETE FROM outputs WHERE id = ? AND user_id = ?").bind(c.req.param("id"), user).run();
+  }
+  return c.json({ ok: true });
+});
+
+// Exhibits: outputs shown in the public museum. The museum Worker only reads them.
+type ExhibitRow = {
+  id: string; output_id: string; wing: string; title: string; statement: string; hero: number; live: number;
+  size: string; position: number; created_at: number;
+};
+const toLabExhibit = (r: ExhibitRow): LabExhibit => {
+  const size = JSON.parse(r.size) as LabExhibit["size"];
+  return {
+    id: r.id, outputId: r.output_id, wing: r.wing, title: r.title, statement: r.statement, hero: !!r.hero, live: !!r.live,
+    size, longSide: Math.max(size.w, size.h), position: r.position, createdAt: r.created_at,
+  };
+};
+
+const deleteExhibitImages = (env: Env, id: string) =>
+  env.BUCKET.delete((Object.keys(IMAGE_SIZES) as ImageSize[]).map((s) => imageKey(id, s)));
+
+/** Validates what the lab sends; null if it's unusable. */
+function parseExhibitInput(v: Partial<ExhibitInput>): ExhibitInput | null {
+  const title = typeof v.title === "string" ? v.title.trim().slice(0, 120) : "";
+  const longSide = Number(v.longSide);
+  if (!title || !(longSide >= 0.2 && longSide <= 10)) return null;
+  return {
+    title, wing: cleanWing(v.wing), longSide, hero: !!v.hero, live: v.live !== false,
+    statement: typeof v.statement === "string" ? v.statement.trim().slice(0, MAX_STATEMENT) : "",
+  };
+}
+
+const nextPosition = async (env: Env, wing: string) =>
+  ((await env.DB.prepare("SELECT MAX(position) AS p FROM exhibits WHERE wing = ?").bind(wing).first<{ p: number | null }>())?.p ?? -1) + 1;
+
+app.get("/exhibits", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT * FROM exhibits WHERE user_id = ? ORDER BY wing, position")
+    .bind(c.get("user").id).all<ExhibitRow>();
+  return c.json(results.map(toLabExhibit));
+});
+
+// multipart: meta (JSON: outputId + ExhibitInput) + one WebP per IMAGE_SIZES key, resized in the browser
+app.post("/exhibits", async (c) => {
+  const form = await c.req.formData();
+  const meta = JSON.parse(String(form.get("meta") ?? "{}")) as Partial<ExhibitInput> & { outputId?: string };
+  const input = parseExhibitInput(meta);
+  const images = (Object.keys(IMAGE_SIZES) as ImageSize[]).map((s) => [s, form.get(s)] as const);
+  if (!input || images.some(([, f]) => !(f instanceof File) || f.type !== "image/webp" || f.size > 15_000_000)) {
+    return c.json({ error: "expected a title, a size and WebP images" }, 400);
+  }
+  const user = c.get("user").id;
+  const output = await c.env.DB.prepare("SELECT width, height FROM outputs WHERE id = ? AND user_id = ?")
+    .bind(meta.outputId, user).first<{ width: number; height: number }>();
+  if (!output) return c.json({ error: "output not found" }, 404);
+  if (await c.env.DB.prepare("SELECT 1 FROM exhibits WHERE output_id = ?").bind(meta.outputId).first()) {
+    return c.json({ error: "already exhibited" }, 409);
+  }
+
+  const id = crypto.randomUUID();
+  for (const [s, f] of images) {
+    await c.env.BUCKET.put(imageKey(id, s), (f as File).stream(), { httpMetadata: { contentType: "image/webp" } });
+  }
+  const now = Date.now();
+  const assets = Object.fromEntries(images.map(([s]) => [s, imageKey(id, s)]));
+  const row: ExhibitRow = {
+    id, output_id: meta.outputId!, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
+    size: JSON.stringify(physicalSize(output.width, output.height, input.longSide)), position: await nextPosition(c.env, input.wing), created_at: now,
+  };
+  await c.env.DB.prepare(
+    `INSERT INTO exhibits (id, output_id, user_id, wing, title, statement, hero, live, medium, size, assets, position, updated_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2d', ?, ?, ?, ?, ?)`,
+  ).bind(id, row.output_id, user, row.wing, row.title, row.statement, row.hero, row.live, row.size, JSON.stringify(assets), row.position, now, now).run();
+  return c.json(toLabExhibit(row));
+});
+
+app.patch("/exhibits/:id", async (c) => {
+  const input = parseExhibitInput(await c.req.json<Partial<ExhibitInput>>());
+  if (!input) return c.json({ error: "expected a title and a size" }, 400);
+  const user = c.get("user").id;
+  const row = await c.env.DB.prepare(
+    "SELECT e.*, o.width, o.height FROM exhibits e JOIN outputs o ON o.id = e.output_id WHERE e.id = ? AND e.user_id = ?",
+  ).bind(c.req.param("id"), user).first<ExhibitRow & { width: number; height: number }>();
+  if (!row) return c.notFound();
+  // Moving to another wing appends there, so the new wing's existing rooms stay put.
+  const position = input.wing === row.wing ? row.position : await nextPosition(c.env, input.wing);
+  const updated: ExhibitRow = {
+    ...row, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
+    size: JSON.stringify(physicalSize(row.width, row.height, input.longSide)), position,
+  };
+  await c.env.DB.prepare(
+    "UPDATE exhibits SET wing = ?, title = ?, statement = ?, hero = ?, live = ?, size = ?, position = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+  ).bind(updated.wing, updated.title, updated.statement, updated.hero, updated.live, updated.size, position, Date.now(), row.id, user).run();
+  return c.json(toLabExhibit(updated));
+});
+
+app.delete("/exhibits/:id", async (c) => {
+  const id = c.req.param("id");
+  const row = await c.env.DB.prepare("SELECT id FROM exhibits WHERE id = ? AND user_id = ?").bind(id, c.get("user").id).first();
+  if (row) {
+    await deleteExhibitImages(c.env, id);
+    await c.env.DB.prepare("DELETE FROM exhibits WHERE id = ?").bind(id).run();
   }
   return c.json({ ok: true });
 });

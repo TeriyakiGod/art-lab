@@ -1,14 +1,17 @@
-name: Deploy
+name: Deploy lab
 
+# The museum has its own workflow (deploy-museum.yml); changes that only touch it skip this one.
 on:
   push:
     branches: [main]
+    paths-ignore: ["museum/**", "docs/**", ".github/workflows/deploy-museum.yml"]
   pull_request:
+    paths-ignore: ["museum/**", "docs/**", ".github/workflows/deploy-museum.yml"]
   workflow_dispatch:
 
 # One deploy at a time; a newer push waits for the running one instead of cancelling it mid-migration.
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-lab-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:

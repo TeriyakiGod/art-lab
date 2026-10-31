@@ -199,6 +199,18 @@ body.resizing iframe { pointer-events: none; }
   .output-card figcaption { flex-wrap: wrap; justify-content: space-between; }
   .output-meta { flex-basis: 100%; }
 }
+.museum-badge { position: absolute; top: 8px; left: 8px; pointer-events: none; background: rgb(0 0 0 / 0.65); color: var(--text); border-color: transparent; }
+.output-card { position: relative; }
+.exhibit-dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 0; width: min(460px, calc(100% - 32px)); max-height: calc(100% - 32px); }
+.exhibit-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.exhibit-dialog form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.exhibit-dialog h3 { margin: 0; }
+.exhibit-dialog label { display: flex; flex-direction: column; gap: 4px; }
+.exhibit-dialog label.exhibit-check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.exhibit-dialog label.exhibit-check input { margin-top: 4px; }
+.exhibit-dialog .danger { color: var(--danger); margin: 0; }
+.exhibit-preview { width: 100%; max-height: 180px; object-fit: contain; background: var(--panel-2); border-radius: 8px; }
+.exhibit-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .overlay { position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / 0.6); display: grid; place-items: center; padding: 16px; }
 .overlay-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); width: min(900px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 .overlay-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }

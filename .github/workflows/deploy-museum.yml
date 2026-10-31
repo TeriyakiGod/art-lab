@@ -1,0 +1,73 @@
+name: Deploy museum
+
+# The public museum (museum/) at art.kacperochnik.eu. It reads the lab's D1 database and R2 bucket,
+# which the lab workflow creates and migrates.
+on:
+  push:
+    branches: [main]
+    paths: ["museum/**", "shared/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
+  pull_request:
+    paths: ["museum/**", "shared/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-museum-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: museum
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - run: npm run cf-typegen
+      - run: npm run build
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        working-directory: .
+
+      - name: Check configuration
+        run: |
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set (see README: Deploying from GitHub)"; exit 1; }
+          done
+
+      # The committed wrangler.jsonc keeps a placeholder; the lab workflow creates the database.
+      - name: Fill in deployment ids
+        run: |
+          out=$(npx wrangler d1 list --json) || { echo "::error::Listing D1 databases failed. Does the API token have Account → D1 → Edit?"; exit 1; }
+          id=$(jq -r '.[] | select(.name == "art-lab") | .uuid' <<<"$out")
+          [ -n "$id" ] || { echo "::error::the art-lab D1 database doesn't exist yet; run the lab deploy first"; exit 1; }
+          sed -i "s/REPLACE_WITH_D1_ID/$id/" wrangler.jsonc
+          ! grep -n REPLACE_WITH wrangler.jsonc
+
+      - run: npm run cf-typegen
+      - run: npm run build
+      - name: Deploy worker
+        run: npx wrangler deploy

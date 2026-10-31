@@ -98,6 +98,21 @@ are seeded from the sketch seed, `createCanvas(lab.width, lab.height)` gives the
 `lab.palette()` works too. p5 sketches export up to 4× (8× needs `lab.canvas()`). p5.js v2 (LGPL-2.1)
 is bundled unmodified and only loaded into p5 sketches.
 
+## The museum
+
+`museum/` is the public 3D museum at `art.kacperochnik.eu`, a second Worker in an npm workspace
+(plan: [docs/museum-plan.md](docs/museum-plan.md)). In the lab's **Gallery**, press **exhibit** on
+an output to show it there; the lab writes WebP copies under the bucket's public `museum/` prefix,
+and the museum Worker only ever reads exhibits and that prefix.
+
+```bash
+npm run dev:local                  # the lab, http://localhost:5199
+npm run dev --workspace museum     # the museum, http://localhost:5200 (shares the lab's local D1/R2)
+```
+
+`.github/workflows/deploy-museum.yml` deploys it when `museum/` or `shared/` changes. Until the museum
+opens, keep `art.kacperochnik.eu` in the Access app so it stays private.
+
 ## Known limits (Phase 1)
 
 - The loop guard instruments braced `for`/`while`/`do` loops only; a brace-less infinite loop

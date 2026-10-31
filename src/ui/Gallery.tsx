@@ -3,6 +3,9 @@ import type { Output, Sketch } from "../../shared/types";
 import { api, json } from "../lib/api";
 import { getSketch, listSketches, saveSketch } from "../lib/store";
 import { createSketch } from "../lib/create";
+import { listExhibits } from "../lib/exhibit";
+import type { LabExhibit } from "../../shared/museum/manifest";
+import { ExhibitDialog } from "./ExhibitDialog";
 
 /**
  * Opens an output in the studio with its exact code, seed and params. If the
@@ -35,17 +38,21 @@ export function Gallery() {
   const [error, setError] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
   const [sketchFilter, setSketchFilter] = useState("");
+  const [exhibits, setExhibits] = useState<Map<string, LabExhibit>>(new Map());
+  const [exhibiting, setExhibiting] = useState<Output | null>(null);
 
   useEffect(() => {
     api<Output[]>("/outputs").then(setOutputs, () =>
       setError(navigator.onLine ? "Couldn't load your outputs." : "You're offline, and the gallery hasn't been cached on this device yet."),
     );
+    listExhibits().then((list) => setExhibits(new Map(list.map((e) => [e.outputId, e]))), () => {});
     void listSketches().then((list) => setSketches(new Map(list.map((s) => [s.id, s]))));
   }, []);
 
   const sketchIds = useMemo(() => [...new Set(outputs?.map((o) => o.sketchId))], [outputs]);
   const shown = outputs?.filter((o) => (!favOnly || o.favorite) && (!sketchFilter || o.sketchId === sketchFilter));
   const titleOf = (id: string) => sketches.get(id)?.title ?? "Deleted sketch";
+  const wings = useMemo(() => [...new Set([...exhibits.values()].map((e) => e.wing))], [exhibits]);
 
   const toggleFavorite = (o: Output) => {
     setOutputs((list) => list?.map((x) => (x.id === o.id ? { ...x, favorite: !o.favorite } : x)) ?? null);
@@ -54,7 +61,8 @@ export function Gallery() {
     );
   };
   const remove = (o: Output) => {
-    if (!confirm("Delete this output? The image is removed for good.")) return;
+    const note = exhibits.has(o.id) ? " It is also taken out of the museum." : "";
+    if (!confirm(`Delete this output? The image is removed for good.${note}`)) return;
     setOutputs((list) => list?.filter((x) => x.id !== o.id) ?? null);
     void api(`/outputs/${o.id}`, { method: "DELETE" }).catch(() => setError("Couldn't delete that output."));
   };
@@ -86,6 +94,7 @@ export function Gallery() {
             <button className="output-open" onClick={() => void openOutput(o)} title="Open in the studio with this seed and these params">
               <img src={o.url} alt={`${titleOf(o.sketchId)}, seed ${o.seed}`} loading="lazy" />
             </button>
+            {exhibits.has(o.id) && <span className="badge museum-badge">In museum · {exhibits.get(o.id)!.wing}</span>}
             <figcaption>
               <span className="output-meta">
                 <strong>{titleOf(o.sketchId)}</strong>
@@ -99,11 +108,33 @@ export function Gallery() {
               >
                 {o.favorite ? "★" : "☆"}
               </button>
+              <button className="link small" onClick={() => setExhibiting(o)} title="Show this output in the public museum">
+                {exhibits.has(o.id) ? "museum" : "exhibit"}
+              </button>
               <button className="link danger small" onClick={() => remove(o)}>delete</button>
             </figcaption>
           </figure>
         ))}
       </div>
+
+      {exhibiting && (
+        <ExhibitDialog
+          output={exhibiting}
+          exhibit={exhibits.get(exhibiting.id)}
+          defaultTitle={titleOf(exhibiting.sketchId)}
+          wings={wings}
+          onClose={() => setExhibiting(null)}
+          onDone={(e) => {
+            setExhibits((m) => {
+              const next = new Map(m);
+              if (e) next.set(e.outputId, e);
+              else next.delete(exhibiting.id);
+              return next;
+            });
+            setExhibiting(null);
+          }}
+        />
+      )}
     </div>
   );
 }

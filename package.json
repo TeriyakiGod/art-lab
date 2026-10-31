@@ -4,6 +4,9 @@
   "license": "MIT",
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "museum"
+  ],
   "scripts": {
     "dev": "vite",
     "dev:local": "CF_LOCAL=1 vite",
