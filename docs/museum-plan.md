@@ -166,6 +166,19 @@ The output is a `FloorPlan`: rooms (cells, type, accent color), doors, wall segm
 with exact positions, and a spawn point. A property test checks the stability promise: for
 random manifests, `generate(first N works)` must be a prefix of `generate(first N+1)`.
 
+### The atrium and levels
+
+The atrium is the one handcrafted room (`shared/museum/atrium.ts`): 24 × 24 m and 15 m tall, a water
+wall falling the full height of the north side into a reflecting pool, a floating oak stair up to a
+U-shaped balcony, two trees, and a skylight. It has 14 ports: two per side on the ground and two on
+each balcony side. A new wing claims the next free port in a seeded order and stays on that port's
+level, so some wings live upstairs (6 m up). Rooms on different levels may overlap in plan; on the
+same level they never touch. When all ports are taken, a new wing branches off an existing gallery.
+
+Props (`shared/museum/props.ts`) are deterministic too: plants in two or three corners of each
+gallery, a bench in each floor slot (until a 3D work claims it), and the atrium's furniture placed by
+hand. Tests check that no prop blocks a doorway or the spot in front of a work.
+
 ### From plan to 3D
 
 - Walls, floors and ceilings are built per room from the wall segments, merged into one geometry
@@ -326,7 +339,7 @@ can be changed.
 |---|---|---|
 | **0. Groundwork** | Lab moved to `lab.art.kacperochnik.eu` (§12); `exhibits` table; Exhibit button and wing picker in the lab's gallery; public image upload; `museum/` workspace and public Worker on `art.kacperochnik.eu` with a manifest API; split deploy jobs | The manifest URL lists exhibited works publicly; the lab works at its new address, still private |
 | **1. Walkable museum** | Generator (wall and reserved floor slots) + stability tests; floor plan → 3D (gallery, atrium, corridor); display registry with `WallArt`; Rapier controller; desktop controls; labels; focus mode; deep links | You can walk through every exhibited work in a plain-looking building |
-| **2. Look and feel** | Materials, accent colors from palettes, procedural ceilings, LED lines, SSR, bloom, fog, ambient sound, doorway transitions, loading screen | It looks like the brief in §2 |
+| **2. Look and feel** | Handcrafted two-level atrium (water wall into a reflecting pool, floating stair, balconies, skylight); wings on both levels; procedural plants, trees and ivy; benches you can sit on; procedural materials; skylight shadows, room lights, ambient occlusion, bloom; generated water sound; quality setting | It looks like the brief in §2 |
 | **3. Live art and scale** | Live sketch runner, re-roll, series and mirror rooms, room streaming, texture LOD, quality settings | 100+ works stay smooth; animated works move |
 | **4. Everyone's device** | Touch controls, gamepad, glide mode, `/list` fallback, map, accessibility pass | Works on phones and with keyboard only |
 | **5. Multiplayer** | `MuseumRoom` DO, lobby, `PartyAdapter`, avatars, interpolation, emotes | Two browsers see each other walk around |

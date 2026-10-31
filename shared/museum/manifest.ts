@@ -7,7 +7,7 @@ import type { Engine } from "../types";
  */
 
 /** Bump when the generator changes in a way that moves rooms: a deliberate "rehang". */
-export const GENERATOR_VERSION = 1;
+export const GENERATOR_VERSION = 2;
 
 /** '3d' arrives with the lab's 3D mode (plan §9); a new medium is a new union case. */
 export type Medium = "2d";

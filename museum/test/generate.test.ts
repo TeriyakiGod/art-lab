@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { generate, sideLength, type FloorPlan, type Rect } from "../../shared/museum/generate";
-import { isWalkable, neighbors } from "../../shared/museum/floorplan";
+import { generate, sameLevel, sideLength, type FloorPlan, type Rect } from "../../shared/museum/generate";
+import { isWalkable, neighbors, viewpoint } from "../../shared/museum/floorplan";
 import type { Exhibit } from "../../shared/museum/manifest";
 import { rng } from "../../shared/museum/rng";
+import { propsFor, type Prop } from "../../shared/museum/props";
 
 /** A random but reproducible collection: `n` works over `wings` wings, some heroes, mixed sizes. */
 function collection(seed: string, n: number, wings: number): Exhibit[] {
@@ -32,6 +33,7 @@ const cases = [
   { seed: "a", n: 40, wings: 3 },
   { seed: "b", n: 120, wings: 6 },
   { seed: "c", n: 250, wings: 12 },
+  { seed: "e", n: 300, wings: 16 },
   { seed: "d", n: 60, wings: 1 },
 ];
 
@@ -46,6 +48,9 @@ describe("generate", () => {
     const p = plan([]);
     expect(p.rooms.map((r) => r.type)).toEqual(["atrium"]);
     expect(isWalkable(p, p.spawn.x, p.spawn.z)).toBe(true);
+    // Nothing walkable in mid-air over the atrium floor; the balconies are.
+    expect(isWalkable(p, 0, 0, 1)).toBe(false);
+    expect(isWalkable(p, 10, 0, 1)).toBe(true);
   });
 
   for (const { seed, n, wings } of cases) {
@@ -68,10 +73,11 @@ describe("generate", () => {
         }
       });
 
-      it("keeps rooms apart (only corridor ends touch)", () => {
+      it("keeps rooms on the same level apart (only corridor ends touch)", () => {
         const rooms = full.rooms;
         for (let i = 0; i < rooms.length; i++) {
           for (let j = i + 1; j < rooms.length; j++) {
+            if (!sameLevel(rooms[i], rooms[j].level) && !sameLevel(rooms[j], rooms[i].level)) continue;
             expect(overlap(rooms[i].rect, rooms[j].rect), `rooms ${i} and ${j} overlap`).toBe(false);
           }
         }
@@ -91,11 +97,15 @@ describe("generate", () => {
           expect(s.x).toBeLessThanOrEqual(r.x + r.w);
           expect(s.z).toBeGreaterThanOrEqual(r.y);
           expect(s.z).toBeLessThanOrEqual(r.y + r.d);
-          expect(s.y + s.h / 2).toBeLessThan(full.rooms[s.room].height);
-          expect(s.y - s.h / 2).toBeGreaterThan(0.3);
-          // Someone standing in front of it can get there.
-          expect(isWalkable(full, s.x + s.nx * 1.5, s.z + s.nz * 1.5)).toBe(true);
+          const floor = s.level * 6;
+          expect(s.y + s.h / 2).toBeLessThan(floor + full.rooms[s.room].height);
+          expect(s.y - s.h / 2).toBeGreaterThan(floor + 0.3);
+          // Someone standing at its viewpoint (and close up) can get there.
+          const v = viewpoint(s);
+          expect(isWalkable(full, v.x, v.z, s.level), `viewpoint of ${s.exhibitId}`).toBe(true);
+          expect(isWalkable(full, s.x + s.nx * 1.2, s.z + s.nz * 1.2, s.level)).toBe(true);
           for (const d of full.doors) {
+            if (d.y !== floor) continue;
             // The work's span along its wall must not reach into a doorway on the same wall line.
             const onLine = s.nx !== 0 ? d.x1 === d.x2 && Math.abs(d.x1 - s.x) < 0.5 : d.z1 === d.z2 && Math.abs(d.z1 - s.z) < 0.5;
             if (!onLine) continue;
@@ -107,11 +117,18 @@ describe("generate", () => {
         for (let i = 0; i < full.slots.length; i++) {
           for (let j = i + 1; j < full.slots.length; j++) {
             const a = full.slots[i], b = full.slots[j];
-            if (a.room !== b.room || a.nx !== b.nx || a.nz !== b.nz || Math.abs(a.nx ? a.x - b.x : a.z - b.z) > 0.01) continue;
+            if (a.room !== b.room || a.level !== b.level || a.nx !== b.nx || a.nz !== b.nz || Math.abs(a.nx ? a.x - b.x : a.z - b.z) > 0.01) continue;
             const gap = Math.abs(a.nx ? a.z - b.z : a.x - b.x) - (a.w + b.w) / 2;
             expect(gap, `${a.exhibitId} and ${b.exhibitId} overlap`).toBeGreaterThan(0.2);
           }
         }
+      });
+
+      it("keeps each wing on one level", () => {
+        const levels = new Map<string, Set<number>>();
+        for (const r of full.rooms) if (r.wing) levels.set(r.wing, (levels.get(r.wing) ?? new Set()).add(r.level));
+        for (const [wing, set] of levels) expect(set.size, wing).toBe(1);
+        if (wings >= 12) expect(full.rooms.some((r) => r.level === 1)).toBe(true);
       });
 
       it("keeps each wing's galleries in that wing", () => {
@@ -130,4 +147,54 @@ describe("generate", () => {
       });
     });
   }
+});
+
+describe("props", () => {
+  const works = collection("props", 150, 10);
+  const p = plan(works);
+  const props = propsFor(p, "test");
+
+  /** Footprint check: is (x, z) on `level` inside this prop? */
+  const blocks = (prop: Prop, x: number, z: number, level: number) => {
+    if (prop.kind === "ivy") return false;
+    if (Math.round(prop.y / 6) !== level) return false;
+    if (prop.kind === "bench") {
+      const c = Math.cos(prop.yaw), s = Math.sin(prop.yaw);
+      const dx = x - prop.x, dz = z - prop.z;
+      const along = dx * c - dz * s, across = dx * s + dz * c;
+      return Math.abs(along) < prop.length / 2 + 0.3 && Math.abs(across) < 0.25 + 0.3;
+    }
+    return Math.hypot(x - prop.x, z - prop.z) < prop.r + 0.3;
+  };
+
+  it("is deterministic and furnishes every gallery", () => {
+    expect(propsFor(p, "test")).toEqual(props);
+    for (const room of p.rooms.filter((r) => r.type === "gallery")) {
+      expect(props.some((q) => q.kind === "plant" && q.x > room.rect.x && q.x < room.rect.x + room.rect.w && q.z > room.rect.y && q.z < room.rect.y + room.rect.d)).toBe(true);
+    }
+  });
+
+  it("never blocks a doorway or the spot in front of a work", () => {
+    for (const prop of props) {
+      for (const s of p.slots) {
+        const v = viewpoint(s);
+        expect(blocks(prop, v.x, v.z, s.level), `${prop.kind} blocks the view of ${s.exhibitId}`).toBe(false);
+        expect(blocks(prop, s.x + s.nx * 0.9, s.z + s.nz * 0.9, s.level), `${prop.kind} stands in front of ${s.exhibitId}`).toBe(false);
+      }
+      for (const d of p.doors) {
+        const level = Math.round(d.y / 6);
+        const mx = (d.x1 + d.x2) / 2, mz = (d.z1 + d.z2) / 2;
+        for (const [ox, oz] of [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) {
+          expect(blocks(prop, mx + ox, mz + oz, level), `${prop.kind} blocks a doorway`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("puts every prop somewhere walkable", () => {
+    for (const prop of props) {
+      if (prop.kind === "ivy") continue;
+      expect(isWalkable(p, prop.x, prop.z, Math.round(prop.y / 6)), `${prop.kind} at ${prop.x},${prop.y},${prop.z}`).toBe(true);
+    }
+  });
 });

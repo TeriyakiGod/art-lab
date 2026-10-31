@@ -1,4 +1,5 @@
 import { GENERATOR_VERSION, type Exhibit, type Manifest } from "./manifest";
+import { ATRIUM, LEVEL_HEIGHT } from "./atrium";
 import { rng, shuffle, type Rng } from "./rng";
 
 /*
@@ -6,7 +7,8 @@ import { rng, shuffle, type Rng } from "./rng";
  * See docs/museum-plan.md §5.
  *
  * Grid: cell (x, y) covers world [x, x+1] × [y, y+1] on the X/Z plane (grid y is world z).
- * North is −z. Rooms are rectangles of cells that never touch, except a corridor touching the
+ * North is −z. The handcrafted atrium (atrium.ts) spans two levels; every other room sits on one
+ * level, LEVEL_HEIGHT apart. Rooms on the same level never touch, except a corridor touching the
  * rooms at its two ends, so every wall belongs to exactly one room.
  *
  * Stability: works are placed one at a time in `position` order (one sequence across all wings),
@@ -19,15 +21,18 @@ export type Side = "N" | "E" | "S" | "W";
 export type Rect = { x: number; y: number; w: number; d: number };
 export type RoomType = "atrium" | "gallery" | "corridor";
 
-/** A gap in one side of a room, in cells from the side's low end (x for N/S, y for E/W). */
-export type Opening = { side: Side; start: number; width: number };
+/** A gap in one side of a room, in cells from the side's low end (x for N/S, y for E/W), on one level. */
+export type Opening = { side: Side; start: number; width: number; level: number };
 
 export type Room = {
   id: number;
   type: RoomType;
   /** null for the atrium. */
   wing: string | null;
+  /** 0 on the ground, 1 upstairs. The atrium (level 0) is tall enough to span both. */
+  level: number;
   rect: Rect;
+  /** Ceiling height above the room's own floor. */
   height: number;
   /** Hex color the room's lights and details take on. */
   accent: string;
@@ -41,21 +46,23 @@ export type Room = {
   exits: Opening[];
 };
 
-/** World-space segment of an open doorway between two rooms. */
-export type Door = { from: number; to: number; x1: number; z1: number; x2: number; z2: number };
+/** World-space segment of an open doorway between two rooms, at floor height y. */
+export type Door = { from: number; to: number; x1: number; z1: number; x2: number; z2: number; y: number };
 
-/** A wall piece on a room's boundary, from y0 up to y1 (lintels above doorways start above 0). */
+/** A wall piece on a room's boundary, from y0 up to y1 (world heights). */
 export type Wall = { room: number; x1: number; z1: number; x2: number; z2: number; y0: number; y1: number };
 
-/** A 2D work on a wall. x/y/z is the center of the work's face; (nx, nz) points into the room. */
+/** A 2D work on a wall. x/y/z is the center of the work's face (world); (nx, nz) points into the room. */
 export type WallSlot = {
-  exhibitId: string; room: number;
+  exhibitId: string; room: number; level: number;
   x: number; y: number; z: number; nx: number; nz: number;
   w: number; h: number;
+  /** How far back a viewer can stand (balconies are shallow). */
+  maxView: number;
 };
 
-/** A spot reserved on the floor for a future 3D work (plan §9). Empty for now. */
-export type FloorSlot = { room: number; x: number; z: number; r: number };
+/** A spot reserved on the floor for a future 3D work (plan §9). Benches use them until then. */
+export type FloorSlot = { room: number; level: number; x: number; z: number; r: number };
 
 export type FloorPlan = {
   generatorVersion: number;
@@ -66,7 +73,7 @@ export type FloorPlan = {
   floorSlots: FloorSlot[];
   /** Works that found no place (should never happen; the tests check). */
   unplaced: string[];
-  spawn: { x: number; z: number; yaw: number };
+  spawn: { x: number; y: number; z: number; yaw: number };
 };
 
 // ---- dimensions (meters = cells) ----
@@ -74,8 +81,7 @@ export const DOOR_WIDTH = 3;
 export const DOOR_HEIGHT = 3.2;
 export const WALL_THICKNESS = 0.2;
 export const EYE_HEIGHT = 1.65;
-const ATRIUM = { size: 16, height: 9, ports: [2, 11] };
-const GALLERY_HEIGHT = 4.6;
+export const GALLERY_HEIGHT = 4.6;
 const CORRIDOR_HEIGHT = DOOR_HEIGHT;
 const GALLERY_SIZES: [number, number][] = [[12, 10], [10, 12], [14, 9], [9, 14], [11, 11], [16, 10], [8, 12], [12, 8], [13, 13]];
 const CORRIDOR_LENGTHS = [2, 3, 4, 5];
@@ -90,10 +96,12 @@ const SLOT_PITCH = 2.6;
 /** Minimum free space beside a work, split over both sides. */
 const ART_GAP = 0.8;
 const ART_CENTER = 1.55;
+const MAX_VIEW = 6;
 
 const SIDES: Side[] = ["N", "E", "S", "W"];
 const OPPOSITE: Record<Side, Side> = { N: "S", S: "N", E: "W", W: "E" };
 
+export const floorY = (level: number) => level * LEVEL_HEIGHT;
 export const sideLength = (r: Rect, side: Side) => (side === "N" || side === "S" ? r.w : r.d);
 
 /** The world-space line of one side, from its low end to its high end, with the inward normal. */
@@ -108,6 +116,9 @@ export function sideLine(r: Rect, side: Side) {
 
 const overlaps = (a: Rect, b: Rect, margin: number) =>
   a.x < b.x + b.w + margin && b.x < a.x + a.w + margin && a.y < b.y + b.d + margin && b.y < a.y + a.d + margin;
+
+/** Whether two rooms share a level (the atrium is on every level). */
+export const sameLevel = (a: Pick<Room, "type" | "level">, level: number) => a.type === "atrium" || a.level === level;
 
 /** Most saturated, not-too-dark color in a palette, for a room's accent. */
 function accentFrom(palette: string[], fallback: Rng): string {
@@ -133,16 +144,16 @@ function hslHex(h: number, s: number, l: number) {
   return `#${f(0)}${f(8)}${f(4)}`;
 }
 
-/** Free intervals along each side where art may hang, in hanging order. */
-type Run = { side: Side; a: number; b: number; pitch: number; taken: boolean[] };
+/** Free stretches of wall where art may hang, in hanging order. */
+type Run = { side: Side; level: number; a: number; b: number; pitch: number; taken: boolean[]; maxTop: number; maxView: number; center: number };
 
 function runsFor(room: Room): Run[] {
   if (room.type === "corridor") return [];
   if (room.type === "atrium") {
-    // Only the wall between each side's two ports, one hero centered there.
-    const [p1, p2] = ATRIUM.ports;
+    // One hero per hero wall, between that side's two ports.
+    const [p1, p2] = [4, 17];
     const a = p1 + DOOR_WIDTH + OPENING_MARGIN, b = p2 - OPENING_MARGIN;
-    return SIDES.map((side) => ({ side, a, b, pitch: b - a, taken: [false] }));
+    return ATRIUM.heroes.map((h) => ({ ...h, a, b, pitch: b - a, taken: [false], center: 2.4 }));
   }
   const first = room.entrance ? OPPOSITE[room.entrance.side] : "N";
   const order = SIDES.slice(SIDES.indexOf(first)).concat(SIDES.slice(0, SIDES.indexOf(first)));
@@ -157,7 +168,9 @@ function runsFor(room: Room): Run[] {
     for (const [s, e] of [...blocked, [len - CORNER_MARGIN, Infinity]]) {
       const a = cursor, b = Math.min(s, len - CORNER_MARGIN);
       const n = Math.floor((b - a) / SLOT_PITCH);
-      if (n >= 1) runs.push({ side, a, b, pitch: (b - a) / n, taken: new Array(n).fill(false) });
+      if (n >= 1) {
+        runs.push({ side, level: room.level, a, b, pitch: (b - a) / n, taken: new Array(n).fill(false), maxTop: room.height - 0.4, maxView: MAX_VIEW, center: ART_CENTER });
+      }
       cursor = Math.max(cursor, e);
     }
   }
@@ -167,9 +180,9 @@ function runsFor(room: Room): Run[] {
 /** Hangs a work in the first free stretch of slots wide enough, or returns null. */
 function hang(room: Room, runs: Run[], e: Exhibit): WallSlot | null {
   const { w, h } = e.size;
-  const y = Math.max(room.type === "atrium" ? 2.4 : ART_CENTER, h / 2 + 0.45);
-  if (y + h / 2 > room.height - 0.4) return null;
   for (const run of runs) {
+    const local = Math.max(run.center, h / 2 + 0.45);
+    if (local + h / 2 > run.maxTop) continue;
     const k = Math.max(1, Math.ceil((w + ART_GAP) / run.pitch));
     if (k * run.pitch < w + 0.3) continue;
     for (let i = 0; i + k <= run.taken.length; i++) {
@@ -177,12 +190,15 @@ function hang(room: Room, runs: Run[], e: Exhibit): WallSlot | null {
       for (let j = i; j < i + k; j++) run.taken[j] = true;
       const along = run.a + run.pitch * (i + k / 2);
       const L = sideLine(room.rect, run.side);
-      return {
-        exhibitId: e.id, room: room.id, w, h, y,
-        x: L.x + L.dx * along + L.nx * ART_INSET,
-        z: L.z + L.dz * along + L.nz * ART_INSET,
-        nx: L.nx, nz: L.nz,
-      };
+      const x = L.x + L.dx * along + L.nx * ART_INSET, z = L.z + L.dz * along + L.nz * ART_INSET;
+      // Viewers stand short of anything in a floor slot (a bench now, a 3D work later).
+      let maxView = run.maxView;
+      for (const f of floorSlotsFor(room)) {
+        const ahead = (f.x - x) * L.nx + (f.z - z) * L.nz;
+        const aside = Math.abs((f.x - x) * L.dx + (f.z - z) * L.dz);
+        if (ahead > 0 && aside < f.r + 0.4) maxView = Math.min(maxView, ahead - f.r - 0.45);
+      }
+      return { exhibitId: e.id, room: room.id, level: run.level, w, h, y: floorY(run.level) + local, x, z, nx: L.nx, nz: L.nz, maxView };
     }
   }
   return null;
@@ -210,9 +226,9 @@ function roomBeyond(c: Rect, dir: Side, along: number, depth: number, offset: nu
 }
 
 /** Exits centered on every side but the entrance, in a seeded order. */
-function galleryExits(rect: Rect, entrance: Side, r: Rng): Opening[] {
+function galleryExits(rect: Rect, entrance: Side, level: number, r: Rng): Opening[] {
   const exits = SIDES.filter((s) => s !== entrance).map((side) => ({
-    side, start: Math.floor((sideLength(rect, side) - DOOR_WIDTH) / 2), width: DOOR_WIDTH,
+    side, start: Math.floor((sideLength(rect, side) - DOOR_WIDTH) / 2), width: DOOR_WIDTH, level,
   }));
   return shuffle(exits, r);
 }
@@ -221,9 +237,10 @@ function floorSlotsFor(room: Room): FloorSlot[] {
   if (room.type !== "gallery") return [];
   const { x, y, w, d } = room.rect;
   const cx = x + w / 2, cz = y + d / 2;
-  if (w >= 14 && d >= 9) return [{ room: room.id, x: cx - 3.5, z: cz, r: 1.4 }, { room: room.id, x: cx + 3.5, z: cz, r: 1.4 }];
-  if (d >= 14 && w >= 9) return [{ room: room.id, x: cx, z: cz - 3.5, r: 1.4 }, { room: room.id, x: cx, z: cz + 3.5, r: 1.4 }];
-  if (w >= 10 && d >= 10) return [{ room: room.id, x: cx, z: cz, r: 1.5 }];
+  const at = (dx: number, dz: number, r: number) => ({ room: room.id, level: room.level, x: cx + dx, z: cz + dz, r });
+  if (w >= 14 && d >= 9) return [at(-3.5, 0, 1.4), at(3.5, 0, 1.4)];
+  if (d >= 14 && w >= 9) return [at(0, -3.5, 1.4), at(0, 3.5, 1.4)];
+  if (w >= 10 && d >= 10) return [at(0, 0, 1.5)];
   return [];
 }
 
@@ -250,58 +267,53 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
     return r;
   };
 
-  const s = ATRIUM.size;
   const atriumRng = rng(seed, "atrium");
   const atrium = addRoom({
-    type: "atrium", wing: null, rect: { x: -s / 2, y: -s / 2, w: s, d: s }, height: ATRIUM.height,
+    type: "atrium", wing: null, level: 0, rect: { ...ATRIUM.rect }, height: ATRIUM.height,
     accent: "#e8e6f0", parent: null, entrance: null,
-    // Ports for wings, in the order wings claim them.
-    exits: shuffle(SIDES.flatMap((side) => ATRIUM.ports.map((start) => ({ side, start, width: DOOR_WIDTH }))), atriumRng),
+    // Ports for wings on both levels, in the order wings claim them.
+    exits: shuffle(ATRIUM.ports.map((p) => ({ ...p, width: DOOR_WIDTH })), atriumRng),
   });
-  // Heroes hang on the atrium's sides in a seeded order.
-  const atriumRuns = runs.get(atrium.id)!;
-  const heroOrder = shuffle(atriumRuns, atriumRng);
+  // Heroes take the atrium's hero walls in a seeded order.
+  const heroOrder = shuffle(runs.get(atrium.id)!, atriumRng);
   runs.set(atrium.id, heroOrder);
 
-  const fits = (rect: Rect, ignore: number[]) =>
-    rooms.every((r) => ignore.includes(r.id) || !overlaps(rect, r.rect, 1));
+  const fits = (rect: Rect, level: number, ignore: number[]) =>
+    rooms.every((r) => ignore.includes(r.id) || !sameLevel(r, level) || !overlaps(rect, r.rect, 1));
 
   /**
-   * Tries to grow a corridor and a new gallery off `parent` through one of its free exits. The
-   * gallery must have room on its walls for `e`, the work that needs it.
+   * Tries to grow a corridor and a new gallery off `parent` through one of its free exits on
+   * `level`. The gallery must have room on its walls for `e`, the work that needs it.
    */
-  const grow = (parent: Room, e: Exhibit, r: Rng, lengths: number[], accent: string): Room | null => {
+  const grow = (parent: Room, level: number, e: Exhibit, r: Rng, lengths: number[], accent: string): Room | null => {
     const wing = e.wing;
     const used = usedExits.get(parent.id)!;
     const lens = shuffle(lengths.slice(0, 4), r).concat(lengths.slice(4));
     const sizes = shuffle(GALLERY_SIZES, r);
     for (let ei = 0; ei < parent.exits.length; ei++) {
-      if (used.has(ei)) continue;
       const exit = parent.exits[ei];
+      if (used.has(ei) || exit.level !== level) continue;
       for (const len of lens) {
         const corridor = corridorRect(parent.rect, exit, len);
-        if (!fits(corridor, [parent.id])) continue;
+        if (!fits(corridor, level, [parent.id])) continue;
         for (const [along, depth] of sizes) {
           const centered = Math.floor((along - DOOR_WIDTH) / 2);
           for (const offset of [centered, 2, along - DOOR_WIDTH - 2]) {
             const rect = roomBeyond(corridor, exit.side, along, depth, offset);
-            if (!fits(rect, [])) continue;
+            if (!fits(rect, level, [])) continue;
             const entranceSide = OPPOSITE[exit.side];
-            const entrance = { side: entranceSide, start: offset, width: DOOR_WIDTH };
-            const exits = galleryExits(rect, entranceSide, rng(seed, wing, parent.id, ei, along, depth, offset));
-            const draft = { id: -1, type: "gallery", wing, rect, height: GALLERY_HEIGHT, accent, parent: -1, entrance, exits } satisfies Room;
+            const entrance = { side: entranceSide, start: offset, width: DOOR_WIDTH, level };
+            const exits = galleryExits(rect, entranceSide, level, rng(seed, wing, parent.id, ei, along, depth, offset));
+            const draft = { id: -1, type: "gallery", wing, level, rect, height: GALLERY_HEIGHT, accent, parent: -1, entrance, exits } satisfies Room;
             if (!hang(draft, runsFor(draft), e)) continue;
             used.add(ei);
             const c = addRoom({
-              type: "corridor", wing, rect: corridor, height: CORRIDOR_HEIGHT, accent, parent: parent.id,
-              entrance: { side: entranceSide, start: 0, width: DOOR_WIDTH },
-              exits: [{ side: exit.side, start: 0, width: DOOR_WIDTH }],
+              type: "corridor", wing, level, rect: corridor, height: CORRIDOR_HEIGHT, accent, parent: parent.id,
+              entrance: { side: entranceSide, start: 0, width: DOOR_WIDTH, level },
+              exits: [{ side: exit.side, start: 0, width: DOOR_WIDTH, level }],
             });
             usedExits.get(c.id)!.add(0);
-            const room = addRoom({
-              type: "gallery", wing, rect, height: GALLERY_HEIGHT, accent, parent: c.id,
-              entrance, exits,
-            });
+            const room = addRoom({ type: "gallery", wing, level, rect, height: GALLERY_HEIGHT, accent, parent: c.id, entrance, exits });
             doors.push(doorBetween(parent, exit, c.id), doorBetween(c, c.exits[0], room.id));
             return room;
           }
@@ -310,6 +322,9 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
     }
     return null;
   };
+
+  /** A wing stays on the level of the atrium port it opened from. */
+  const wingLevel = new Map<string, number>();
 
   for (const e of placementOrder(manifest.exhibits)) {
     if (e.hero) {
@@ -321,15 +336,34 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
     const slot = current && hang(current, runs.get(current.id)!, e);
     if (slot) { slots.push(slot); continue; }
 
-    // A new room for this wing: off its own rooms (newest first), or the atrium for a new wing;
-    // as a last resort off any room with longer corridors.
+    // A new room for this wing: off its own rooms (newest first), or the atrium's next free port for
+    // a new wing; as a last resort off any room on the wing's level, with longer corridors.
     const r = rng(seed, e.wing, list.length);
     const accent = accentFrom(e.palette, r);
-    const parents = list.length ? [...list].reverse().map((id) => rooms[id]) : [atrium];
     let room: Room | null = null;
-    for (const p of parents) if ((room = grow(p, e, r, CORRIDOR_LENGTHS, accent))) break;
-    if (!room) for (const p of rooms) if (p.type !== "corridor" && (room = grow(p, e, r, FALLBACK_CORRIDOR_LENGTHS, accent))) break;
+    if (list.length) {
+      const level = wingLevel.get(e.wing)!;
+      for (const id of [...list].reverse()) if ((room = grow(rooms[id], level, e, r, CORRIDOR_LENGTHS, accent))) break;
+      if (!room) {
+        for (const p of rooms) {
+          if (p.type !== "corridor" && sameLevel(p, level) && (room = grow(p, level, e, r, FALLBACK_CORRIDOR_LENGTHS, accent))) break;
+        }
+      }
+    } else {
+      const used = usedExits.get(atrium.id)!;
+      for (let i = 0; i < atrium.exits.length && !room; i++) {
+        if (used.has(i)) continue;
+        const level = atrium.exits[i].level;
+        room = grow(atrium, level, e, r, CORRIDOR_LENGTHS, accent) ?? grow(atrium, level, e, r, FALLBACK_CORRIDOR_LENGTHS, accent);
+      }
+      // Every port taken: the new wing branches off an existing gallery, oldest first.
+      for (const p of rooms) {
+        if (room) break;
+        if (p.type === "gallery") room = grow(p, p.level, e, r, FALLBACK_CORRIDOR_LENGTHS, accent);
+      }
+    }
     if (!room) { unplaced.push(e.id); continue; }
+    wingLevel.set(e.wing, room.level);
     list.push(room.id);
     wingRooms.set(e.wing, list);
     const placed = hang(room, runs.get(room.id)!, e);
@@ -342,37 +376,47 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
     rooms, doors, slots, unplaced,
     walls: rooms.flatMap((room) => wallsFor(room, usedExits.get(room.id)!)),
     floorSlots: rooms.flatMap(floorSlotsFor),
-    spawn: { x: 0, z: 2, yaw: 0 },
+    spawn: { ...ATRIUM.spawn, y: 0 },
   };
 }
 
 function doorBetween(from: Room, o: Opening, to: number): Door {
   const L = sideLine(from.rect, o.side);
   return {
-    from: from.id, to,
+    from: from.id, to, y: floorY(o.level),
     x1: L.x + L.dx * o.start, z1: L.z + L.dz * o.start,
     x2: L.x + L.dx * (o.start + o.width), z2: L.z + L.dz * (o.start + o.width),
   };
 }
 
-/** A room's walls: every side minus its open doorways, plus lintels above doorways in taller rooms. */
+/**
+ * A room's walls: each side is cut at every doorway edge, and each stretch gets wall everywhere
+ * from floor to ceiling except the doorways over it (the atrium can have one door above another).
+ */
 function wallsFor(room: Room, used: Set<number>): Wall[] {
   const open = [room.entrance, ...room.exits.filter((_, i) => used.has(i))].filter((o): o is Opening => !!o);
+  const base = floorY(room.level);
+  const top = base + room.height;
   const walls: Wall[] = [];
   for (const side of SIDES) {
     const L = sideLine(room.rect, side);
     const len = sideLength(room.rect, side);
-    const at = (a: number, b: number, y0: number): Wall => ({
-      room: room.id, y0, y1: room.height,
-      x1: L.x + L.dx * a, z1: L.z + L.dz * a, x2: L.x + L.dx * b, z2: L.z + L.dz * b,
-    });
-    let cursor = 0;
-    for (const o of open.filter((o) => o.side === side).sort((p, q) => p.start - q.start)) {
-      if (o.start > cursor) walls.push(at(cursor, o.start, 0));
-      if (room.height > DOOR_HEIGHT + 0.01) walls.push(at(o.start, o.start + o.width, DOOR_HEIGHT));
-      cursor = o.start + o.width;
+    const here = open.filter((o) => o.side === side);
+    const cuts = [...new Set([0, len, ...here.flatMap((o) => [o.start, o.start + o.width])])].sort((a, b) => a - b);
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const [a, b] = [cuts[i], cuts[i + 1]];
+      const gaps = here
+        .filter((o) => o.start <= a && o.start + o.width >= b)
+        .map((o) => [floorY(o.level), floorY(o.level) + DOOR_HEIGHT])
+        .sort((p, q) => p[0] - q[0]);
+      let y = base;
+      for (const [g0, g1] of [...gaps, [top, top]]) {
+        if (g0 > y + 0.01) {
+          walls.push({ room: room.id, y0: y, y1: g0, x1: L.x + L.dx * a, z1: L.z + L.dz * a, x2: L.x + L.dx * b, z2: L.z + L.dz * b });
+        }
+        y = Math.max(y, g1);
+      }
     }
-    if (cursor < len) walls.push(at(cursor, len, 0));
   }
   return walls;
 }

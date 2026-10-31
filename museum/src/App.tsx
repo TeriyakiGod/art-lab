@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import type { Manifest } from "../../shared/museum/manifest";
 import { generate } from "../../shared/museum/generate";
 import { viewpoint } from "../../shared/museum/floorplan";
+import { propsFor } from "../../shared/museum/props";
 import { Overlay } from "./ui/Overlay";
 import { ui } from "./ui/store";
 
@@ -22,6 +23,8 @@ export function App() {
   }, []);
 
   const plan = useMemo(() => manifest && generate(manifest), [manifest]);
+  const props = useMemo(() => (plan && manifest ? propsFor(plan, manifest.layoutSeed) : []), [plan, manifest]);
+  if (import.meta.env.DEV && plan) Object.assign((window as unknown as { __museum: object }).__museum, { plan, props });
   const exhibits = useMemo(() => new Map(manifest?.exhibits.map((e) => [e.id, e])), [manifest]);
 
   // Start in front of a linked work, focused on it; otherwise in the atrium.
@@ -35,7 +38,7 @@ export function App() {
     <>
       {plan && start && (
         <Suspense fallback={null}>
-          <Museum plan={plan} exhibits={exhibits} start={start} />
+          <Museum plan={plan} props={props} exhibits={exhibits} start={start} />
         </Suspense>
       )}
       <Overlay manifest={manifest} error={error} exhibits={exhibits} />

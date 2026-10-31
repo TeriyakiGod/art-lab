@@ -8,9 +8,13 @@ export type UiState = {
   hovered: string | null;
   /** The work being viewed up close; movement stops while set. */
   focused: string | null;
+  /** The bench under the crosshair, close enough to sit on (index into the benches). */
+  hoveredSeat: number | null;
+  /** The bench being sat on. */
+  seated: number | null;
 };
 
-let state: UiState = { walking: false, hovered: null, focused: null };
+let state: UiState = { walking: false, hovered: null, focused: null, hoveredSeat: null, seated: null };
 const listeners = new Set<() => void>();
 
 export const ui = {

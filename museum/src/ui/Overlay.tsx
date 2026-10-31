@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { Exhibit, Manifest } from "../../../shared/museum/manifest";
 import { ui, useUi } from "./store";
 import { lockPointer } from "../engine/pointer";
+import { settings, useSettings } from "./settings";
+import { ambience } from "../audio/ambience";
 
 type Props = { manifest: Manifest | null; error: boolean; exhibits: Map<string, Exhibit> };
 
@@ -12,6 +14,9 @@ export function Overlay({ manifest, error, exhibits }: Props) {
   const walking = useUi((s) => s.walking);
   const hovered = useUi((s) => s.hovered);
   const focused = useUi((s) => s.focused);
+  const hoveredSeat = useUi((s) => s.hoveredSeat);
+  const seated = useUi((s) => s.seated);
+  const { quality, sound } = useSettings();
 
   // Keys: E looks closer or goes back to walking; Esc leaves a close look.
   useEffect(() => {
@@ -19,7 +24,9 @@ export function Overlay({ manifest, error, exhibits }: Props) {
       const s = ui.get();
       if (e.code === "KeyE") {
         if (s.focused) { unfocus(); lockPointer(); }
+        else if (s.seated !== null) ui.set({ seated: null });
         else if (s.walking && s.hovered) { ui.set({ focused: s.hovered }); void document.exitPointerLock(); }
+        else if (s.walking && s.hoveredSeat !== null) ui.set({ seated: s.hoveredSeat });
       } else if (e.code === "Escape" && s.focused) unfocus();
     };
     window.addEventListener("keydown", onKey);
@@ -37,7 +44,7 @@ export function Overlay({ manifest, error, exhibits }: Props) {
   if (walking) {
     return (
       <>
-        <div className={`crosshair ${hovered ? "on" : ""}`} />
+        <div className={`crosshair ${hovered || hoveredSeat !== null ? "on" : ""} ${seated !== null ? "hidden" : ""}`} />
         {work && (
           <div className="label">
             <strong>{work.title}</strong>
@@ -45,9 +52,30 @@ export function Overlay({ manifest, error, exhibits }: Props) {
             <kbd>E</kbd> <span className="hint">look closer</span>
           </div>
         )}
+        {!work && hoveredSeat !== null && (
+          <div className="label">
+            <strong>Bench</strong>
+            <kbd>E</kbd> <span className="hint">sit</span>
+          </div>
+        )}
+        {seated !== null && (
+          <div className="label quiet">
+            <span>Take your time.</span>
+            <kbd>E</kbd> <span className="hint">or move to stand up</span>
+          </div>
+        )}
       </>
     );
   }
+  const enter = () => {
+    if (settings.get().sound) ambience.start();
+    lockPointer();
+  };
+  const toggleSound = () => {
+    const on = !settings.get().sound;
+    settings.set({ sound: on });
+    if (on) ambience.start(); else ambience.stop();
+  };
   return (
     <div className="start">
       <div className="start-card">
@@ -63,15 +91,22 @@ export function Overlay({ manifest, error, exhibits }: Props) {
             {isTouch() ? (
               <p className="muted">Walking on touch screens arrives soon. For now, open the museum on a computer.</p>
             ) : (
-              <button className="enter" onClick={lockPointer}>Click to enter</button>
+              <button className="enter" onClick={enter}>Click to enter</button>
             )}
             <dl className="keys">
               <dt>W A S D</dt><dd>walk</dd>
               <dt>Shift</dt><dd>walk faster</dd>
               <dt>Mouse</dt><dd>look around</dd>
               <dt>E / click</dt><dd>look closer at a work</dd>
+              <dt>E</dt><dd>sit on a bench</dd>
               <dt>Esc</dt><dd>pause</dd>
             </dl>
+            <div className="toggles">
+              <button className={sound ? "on" : ""} aria-pressed={sound} onClick={toggleSound}>Sound {sound ? "on" : "off"}</button>
+              <button onClick={() => settings.set({ quality: quality === "high" ? "low" : "high" })} title="Low turns off shadows and ambient occlusion">
+                Quality: {quality === "high" ? "High" : "Low"}
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -106,7 +141,7 @@ function FocusPanel({ exhibit }: { exhibit: Exhibit }) {
         </div>
       )}
       <div className="actions">
-        <button className="enter" onClick={() => { unfocus(); lockPointer(); }}>Back to walking <kbd>E</kbd></button>
+        <button className="enter" onClick={() => { unfocus(); if (settings.get().sound) ambience.start(); lockPointer(); }}>Back to walking <kbd>E</kbd></button>
         <button onClick={copy}>{copied ? "Link copied" : "Copy link"}</button>
       </div>
     </aside>

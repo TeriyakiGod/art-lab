@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Texture } from "three";
 import type { WallSlot } from "../../../shared/museum/generate";
 import type { Exhibit } from "../../../shared/museum/manifest";
 import { loadArt } from "./textures";
 import { useUi } from "../ui/store";
+import { haloMaterial } from "../world/materials";
 
 /** A 2D work floating a few centimeters off its wall. Unlit, so the art is the brightest thing in the room. */
-export function WallArt({ exhibit, slot }: { exhibit: Exhibit; slot: WallSlot }) {
+export function WallArt({ exhibit, slot, accent }: { exhibit: Exhibit; slot: WallSlot; accent: string }) {
+  const halo = useMemo(() => haloMaterial(accent), [accent]);
   const focused = useUi((s) => s.focused === exhibit.id);
   const [texture, setTexture] = useState<Texture | null>(null);
 
@@ -26,6 +28,10 @@ export function WallArt({ exhibit, slot }: { exhibit: Exhibit; slot: WallSlot })
 
   return (
     <group position={[slot.x, slot.y, slot.z]} rotation={[0, Math.atan2(slot.nx, slot.nz), 0]}>
+      {/* A soft glow of the room's accent on the wall behind it. */}
+      <mesh position={[0, 0, -0.035]} material={halo}>
+        <planeGeometry args={[slot.w + 1.4, slot.h + 1.4]} />
+      </mesh>
       {/* A dark mount just behind the work. */}
       <mesh position={[0, 0, -0.025]}>
         <boxGeometry args={[slot.w + 0.04, slot.h + 0.04, 0.03]} />
