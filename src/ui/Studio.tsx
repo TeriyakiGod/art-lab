@@ -213,6 +213,8 @@ function StudioInner(props: { initial: Sketch; userId: string; desktop: boolean;
           const { [id]: _, ...rest } = sketch.values;
           update({ values: rest });
         }}
+        code={draft}
+        onCode={(code) => applyCode(code)}
       />
       <PalettePanel
         active={activePalette}

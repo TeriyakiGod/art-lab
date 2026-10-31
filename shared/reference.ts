@@ -53,7 +53,7 @@ export const REFERENCE: RefSection[] = [
         summary: "Declare sliders and other controls for the Tweak panel.",
         details:
           "Each key is a param id you choose; each value is a spec made with one of the `$genart.params.*` functions below. " +
-          "Call it once, near the top, even with `{}`. Read values with `param(\"id\")` anywhere after that.\n\n" +
+          "Call it once, near the top, even with `{}`. Read values with `param(\"id\")` anywhere after that. You can also add and edit params without code: **+ Add parameter** and **edit** in the Tweak panel rewrite this block for you.\n\n" +
           "`param(\"id\", $genart.random.rnd)` instead returns a *random* value within that param's limits (for example a random number between a range's min and max), without changing the slider.",
         example:
           'const param = await $genart.setParams({\n  count: $genart.params.range({ name: "Count", desc: "How many", min: 1, max: 500, step: 1, default: 100 }),\n});\nconst n = param("count");',
