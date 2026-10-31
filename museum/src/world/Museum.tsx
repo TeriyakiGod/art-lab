@@ -4,7 +4,7 @@ import { Physics } from "@react-three/rapier";
 import { NeutralToneMapping, PCFShadowMap, WebGPURenderer } from "three/webgpu";
 import { Fog, type WebGLRenderer } from "three";
 import type { FloorPlan } from "../../../shared/museum/generate";
-import type { Exhibit } from "../../../shared/museum/manifest";
+import { MAIN_HALL, type Collection, type Exhibit } from "../../../shared/museum/manifest";
 import { seatsOf, type Prop } from "../../../shared/museum/props";
 import { Building } from "./Building";
 import { Atrium } from "./Atrium";
@@ -23,7 +23,10 @@ import { useSettings } from "../ui/settings";
 
 const BACKGROUND = "#060608";
 
-type Props_ = { plan: FloorPlan; props: Prop[]; seed: string; exhibits: Map<string, Exhibit>; start: { x: number; y: number; z: number; yaw: number } };
+type Props_ = {
+  plan: FloorPlan; props: Prop[]; seed: string; collections: Collection[]; exhibits: Map<string, Exhibit>;
+  start: { x: number; y: number; z: number; yaw: number };
+};
 
 /** Captures the mouse when the canvas is clicked, and mirrors pointer lock into the UI state. */
 function PointerLock() {
@@ -64,7 +67,8 @@ function PointerLock() {
   return null;
 }
 
-export default function Museum({ plan, props, seed, exhibits, start }: Props_) {
+export default function Museum({ plan, props, seed, collections, exhibits, start }: Props_) {
+  const names = useMemo(() => new Map(collections.map((c) => [c.id, c.name])), [collections]);
   const net = useMemo(() => new LocalAdapter(), []);
   const fog = useMemo(() => new Fog(BACKGROUND, 26, 90), []);
   const benches = useMemo(() => seatsOf(props), [props]);
@@ -107,7 +111,7 @@ export default function Museum({ plan, props, seed, exhibits, start }: Props_) {
         const exhibit = exhibits.get(slot.exhibitId);
         if (!exhibit) return null;
         const Display = DISPLAYS[exhibit.medium];
-        return <Display key={slot.exhibitId} exhibit={exhibit} slot={slot} accent={accents.get(slot.exhibitId)!} />;
+        return <Display key={slot.exhibitId} exhibit={exhibit} slot={slot} accent={accents.get(slot.exhibitId)!} collection={names.get(exhibit.collection ?? MAIN_HALL) ?? "Main hall"} />;
       })}
       {/* Bloom and ambient occlusion cost several full-screen passes: high quality only. */}
       {quality === "high" && <Effects />}

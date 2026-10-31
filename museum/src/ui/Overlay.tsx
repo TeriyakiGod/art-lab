@@ -89,7 +89,7 @@ export function Overlay({ manifest, error, exhibits }: Props) {
         {manifest && (
           <>
             <p className="muted small">
-              {manifest.exhibits.length} works in {new Set(manifest.exhibits.map((e) => e.wing)).size || 0} wings
+              {manifest.exhibits.length} works · {new Set(manifest.exhibits.map((e) => e.collection).filter(Boolean)).size} collections and the main hall
             </p>
             {isTouch() ? (
               <p className="muted">Walking on touch screens arrives soon. For now, open the museum on a computer.</p>

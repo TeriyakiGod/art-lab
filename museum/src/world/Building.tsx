@@ -18,6 +18,12 @@ const TONES: Record<Room["type"], { wall: string; floor: string; ceiling: string
   corridor: { wall: "#2c2c33", floor: "#1e1e22", ceiling: "#111114" },
 };
 
+/** A room's base tone with a little of its wing's theme color mixed in (not the atrium's). */
+function tinted(tone: string, room: Room, amount: number) {
+  if (room.type === "atrium") return tone;
+  return "#" + new Color(tone).lerp(new Color(room.accent), amount).getHexString();
+}
+
 function wallInstances(plan: FloorPlan): Instance[] {
   return plan.walls.map((w) => {
     const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) + T; // + T closes the corners
@@ -26,7 +32,7 @@ function wallInstances(plan: FloorPlan): Instance[] {
       room: w.room,
       p: [(w.x1 + w.x2) / 2, (w.y0 + w.y1) / 2, (w.z1 + w.z2) / 2],
       s: isAlongX(w) ? [len, h, T] : [T, h, len],
-      color: TONES[plan.rooms[w.room].type].wall,
+      color: tinted(TONES[plan.rooms[w.room].type].wall, plan.rooms[w.room], 0.16),
     };
   });
 }
@@ -122,7 +128,7 @@ export function Building({ plan }: { plan: FloorPlan }) {
     return {
       box, plane,
       walls: wallInstances(plan),
-      floors: floors(plan.rooms, (r) => floorY(r.level), -Math.PI / 2, (r) => TONES[r.type].floor),
+      floors: floors(plan.rooms, (r) => floorY(r.level), -Math.PI / 2, (r) => tinted(TONES[r.type].floor, r, 0.08)),
       // The atrium draws its own ceiling, with the skylight.
       ceilings: floors(plan.rooms.filter((r) => r.type !== "atrium"), (r) => floorY(r.level) + r.height, Math.PI / 2, (r) => TONES[r.type].ceiling),
       strips: stripInstances(plan),

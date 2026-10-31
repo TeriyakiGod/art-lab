@@ -14,13 +14,15 @@ import { haloMaterial } from "../world/materials";
  * room. Shows the live sketch when one is running for it, the image otherwise; draws nothing at all
  * when its room is far away.
  */
-export function WallArt({ exhibit, slot, accent }: { exhibit: Exhibit; slot: WallSlot; accent: string }) {
-  const focused = useUi((s) => s.focused === exhibit.id);
-  const near = useNearby(slot.room);
-  return near || focused ? <ShownArt exhibit={exhibit} slot={slot} accent={accent} focused={focused} /> : null;
+type ArtProps = { exhibit: Exhibit; slot: WallSlot; accent: string; collection: string };
+
+export function WallArt(props: ArtProps) {
+  const focused = useUi((s) => s.focused === props.exhibit.id);
+  const near = useNearby(props.slot.room);
+  return near || focused ? <ShownArt {...props} focused={focused} /> : null;
 }
 
-function ShownArt({ exhibit, slot, accent, focused }: { exhibit: Exhibit; slot: WallSlot; accent: string; focused: boolean }) {
+function ShownArt({ exhibit, slot, accent, collection, focused }: ArtProps & { focused: boolean }) {
   const halo = useMemo(() => haloMaterial(accent), [accent]);
   useEffect(() => () => halo.dispose(), [halo]);
   const [texture, setTexture] = useState<Texture | null>(null);
@@ -51,7 +53,7 @@ function ShownArt({ exhibit, slot, accent, focused }: { exhibit: Exhibit; slot: 
 
   const shown = liveTexture ?? texture;
   const rerolled = live.rerolled(exhibit.id);
-  const plaque = useMemo(() => plaqueTexture(exhibit, rerolled), [exhibit, rerolled]);
+  const plaque = useMemo(() => plaqueTexture(exhibit, collection, rerolled), [exhibit, collection, rerolled]);
   useEffect(() => () => plaque.dispose(), [plaque]);
   const label = plaqueLayout(slot);
   return (

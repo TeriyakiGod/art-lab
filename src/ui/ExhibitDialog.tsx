@@ -1,29 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import type { Output } from "../../shared/types";
 import {
-  DEFAULT_LONG_SIDE, DEFAULT_WING, MAX_STATEMENT, SIZE_PRESETS, physicalSize,
-  type ExhibitInput, type LabExhibit,
+  COLLECTION_COLORS, DEFAULT_LONG_SIDE, MAIN_HALL, MAX_STATEMENT, SIZE_PRESETS, physicalSize,
+  type ExhibitInput, type LabCollection, type LabExhibit,
 } from "../../shared/museum/manifest";
-import { exhibitOutput, removeExhibit, updateExhibit } from "../lib/exhibit";
+import { createCollection, exhibitOutput, removeExhibit, updateExhibit } from "../lib/exhibit";
 
 type Props = {
   output: Output;
   /** Set when the output is already in the museum. */
   exhibit?: LabExhibit;
   defaultTitle: string;
-  /** Wings already in use, for suggestions. */
-  wings: string[];
+  /** All collections, the main hall first. */
+  collections: LabCollection[];
+  /** A collection was made from this dialog. */
+  onCollection?: (c: LabCollection) => void;
   onDone: (exhibit: LabExhibit | null) => void;
   onClose: () => void;
 };
 
+const NEW = "__new__";
+
 /** Puts an output in the public museum, or edits or removes it. */
-export function ExhibitDialog({ output, exhibit, defaultTitle, wings, onDone, onClose }: Props) {
+export function ExhibitDialog({ output, exhibit, defaultTitle, collections, onCollection, onDone, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [form, setForm] = useState<ExhibitInput>(() =>
     exhibit
-      ? { title: exhibit.title, statement: exhibit.statement, wing: exhibit.wing, hero: exhibit.hero, live: exhibit.live, longSide: exhibit.longSide }
-      : { title: defaultTitle, statement: "", wing: wings[0] ?? DEFAULT_WING, hero: false, live: true, longSide: DEFAULT_LONG_SIDE },
+      ? { title: exhibit.title, statement: exhibit.statement, collection: exhibit.collection, hero: exhibit.hero, live: exhibit.live, longSide: exhibit.longSide }
+      : { title: defaultTitle, statement: "", collection: null, hero: false, live: true, longSide: DEFAULT_LONG_SIDE },
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +35,18 @@ export function ExhibitDialog({ output, exhibit, defaultTitle, wings, onDone, on
   useEffect(() => ref.current?.showModal(), []);
 
   const set = <K extends keyof ExhibitInput>(k: K, v: ExhibitInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const newCollection = async () => {
+    const name = prompt("Name of the new collection")?.trim();
+    if (!name) return;
+    try {
+      const color = COLLECTION_COLORS[(collections.length - 1) % COLLECTION_COLORS.length];
+      const c = await createCollection(name, color);
+      onCollection?.(c);
+      set("collection", c.id);
+    } catch {
+      setError("Couldn't create the collection.");
+    }
+  };
   const size = physicalSize(output.width, output.height, form.longSide);
   const sizes = SIZE_PRESETS.some((p) => p.value === form.longSide)
     ? SIZE_PRESETS
@@ -63,10 +79,23 @@ export function ExhibitDialog({ output, exhibit, defaultTitle, wings, onDone, on
           <input type="text" value={form.title} maxLength={120} required onChange={(e) => set("title", e.target.value)} />
         </label>
         <label>
-          Wing
-          <input type="text" value={form.wing} maxLength={60} list="exhibit-wings" onChange={(e) => set("wing", e.target.value)} />
-          <datalist id="exhibit-wings">{wings.map((w) => <option key={w} value={w} />)}</datalist>
-          {exhibit && form.wing.trim() !== exhibit.wing && <span className="small muted">Moves to the end of “{form.wing.trim() || DEFAULT_WING}”.</span>}
+          Collection
+          <select
+            value={form.collection ?? MAIN_HALL}
+            onChange={(e) => {
+              if (e.target.value === NEW) void newCollection();
+              else set("collection", e.target.value === MAIN_HALL ? null : e.target.value);
+            }}
+          >
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>{c.id === MAIN_HALL ? `${c.name} (no collection)` : c.name}</option>
+            ))}
+            <option value={NEW}>New collection…</option>
+          </select>
+          <span className="small muted">
+            {form.collection ? "Hangs in this collection's own wing, in its colors." : "Hangs in the main hall, behind the atrium's stair."}
+            {exhibit && form.collection !== exhibit.collection && " It moves to the end of that wing."}
+          </span>
         </label>
         <label>
           Size on the wall

@@ -3,8 +3,9 @@ import type { Output, Sketch } from "../../shared/types";
 import { api, json } from "../lib/api";
 import { getSketch, listSketches, saveSketch } from "../lib/store";
 import { createSketch } from "../lib/create";
-import { listExhibits } from "../lib/exhibit";
-import type { LabExhibit } from "../../shared/museum/manifest";
+import { listCollections, listExhibits } from "../lib/exhibit";
+import type { LabCollection, LabExhibit } from "../../shared/museum/manifest";
+import { MAIN_HALL } from "../../shared/museum/manifest";
 import { ExhibitDialog } from "./ExhibitDialog";
 
 /**
@@ -40,19 +41,21 @@ export function Gallery() {
   const [sketchFilter, setSketchFilter] = useState("");
   const [exhibits, setExhibits] = useState<Map<string, LabExhibit>>(new Map());
   const [exhibiting, setExhibiting] = useState<Output | null>(null);
+  const [collections, setCollections] = useState<LabCollection[]>([]);
 
   useEffect(() => {
     api<Output[]>("/outputs").then(setOutputs, () =>
       setError(navigator.onLine ? "Couldn't load your outputs." : "You're offline, and the gallery hasn't been cached on this device yet."),
     );
     listExhibits().then((list) => setExhibits(new Map(list.map((e) => [e.outputId, e]))), () => {});
+    listCollections().then(setCollections, () => {});
     void listSketches().then((list) => setSketches(new Map(list.map((s) => [s.id, s]))));
   }, []);
 
   const sketchIds = useMemo(() => [...new Set(outputs?.map((o) => o.sketchId))], [outputs]);
   const shown = outputs?.filter((o) => (!favOnly || o.favorite) && (!sketchFilter || o.sketchId === sketchFilter));
   const titleOf = (id: string) => sketches.get(id)?.title ?? "Deleted sketch";
-  const wings = useMemo(() => [...new Set([...exhibits.values()].map((e) => e.wing))], [exhibits]);
+  const collectionName = (id: string | null) => collections.find((c) => c.id === (id ?? MAIN_HALL))?.name ?? "Main hall";
 
   const toggleFavorite = (o: Output) => {
     setOutputs((list) => list?.map((x) => (x.id === o.id ? { ...x, favorite: !o.favorite } : x)) ?? null);
@@ -94,7 +97,7 @@ export function Gallery() {
             <button className="output-open" onClick={() => void openOutput(o)} title="Open in the studio with this seed and these params">
               <img src={o.url} alt={`${titleOf(o.sketchId)}, seed ${o.seed}`} loading="lazy" />
             </button>
-            {exhibits.has(o.id) && <span className="badge museum-badge">In museum · {exhibits.get(o.id)!.wing}</span>}
+            {exhibits.has(o.id) && <span className="badge museum-badge">In museum · {collectionName(exhibits.get(o.id)!.collection)}</span>}
             <figcaption>
               <span className="output-meta">
                 <strong>{titleOf(o.sketchId)}</strong>
@@ -122,7 +125,8 @@ export function Gallery() {
           output={exhibiting}
           exhibit={exhibits.get(exhibiting.id)}
           defaultTitle={titleOf(exhibiting.sketchId)}
-          wings={wings}
+          collections={collections}
+          onCollection={(c) => setCollections((list) => [...list, c])}
           onClose={() => setExhibiting(null)}
           onDone={(e) => {
             setExhibits((m) => {

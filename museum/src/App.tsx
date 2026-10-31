@@ -22,9 +22,11 @@ function fakeCollection(m: Manifest): Manifest {
   if (!n || !m.exhibits.length) return m;
   const exhibits = Array.from({ length: n }, (_, i) => {
     const e = m.exhibits[i % m.exhibits.length];
-    return { ...e, id: `fake-${i}`, title: `${e.title} #${i}`, wing: `Wing ${i % 14}`, position: i, hero: i % 37 === 0, live: false };
+    return { ...e, id: `fake-${i}`, title: `${e.title} #${i}`, collection: i % 15 ? `fake-c${i % 15}` : null, position: i, hero: i % 37 === 0, live: false };
   });
-  return { ...m, exhibits };
+  const colors = ["#6fd3e0", "#ff7a59", "#b28dff", "#f2c14e", "#5fd68a", "#ff5c8a", "#4f8cff"];
+  const collections = [...m.collections, ...Array.from({ length: 14 }, (_, i) => ({ id: `fake-c${i + 1}`, name: `Collection ${i + 1}`, color: colors[i % colors.length] }))];
+  return { ...m, collections, exhibits };
 }
 
 export function App() {
@@ -61,7 +63,7 @@ export function App() {
     <>
       {plan && start && (
         <Suspense fallback={null}>
-          <Museum plan={plan} props={props} seed={manifest!.layoutSeed} exhibits={exhibits} start={start} />
+          <Museum plan={plan} props={props} seed={manifest!.layoutSeed} collections={manifest!.collections} exhibits={exhibits} start={start} />
         </Suspense>
       )}
       <Overlay manifest={manifest} error={error} exhibits={exhibits} />

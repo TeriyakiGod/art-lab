@@ -7,7 +7,7 @@ import type { Engine } from "../types";
  */
 
 /** Bump when the generator changes in a way that moves rooms: a deliberate "rehang". */
-export const GENERATOR_VERSION = 2;
+export const GENERATOR_VERSION = 3;
 
 /** '3d' arrives with the lab's 3D mode (plan §9); a new medium is a new union case. */
 export type Medium = "2d";
@@ -19,7 +19,8 @@ export type ExhibitBase = {
   id: string;
   title: string;
   statement: string;
-  wing: string;
+  /** The collection's id, which decides the wing; null hangs the work in the main hall. */
+  collection: string | null;
   /** Order across the whole museum (one sequence for all wings); only ever appended. */
   position: number;
   /** A candidate for an atrium. */
@@ -48,24 +49,38 @@ export type Manifest = {
   generatorVersion: number;
   /** Seeds every random choice the building makes. Changing it rehangs the whole museum. */
   layoutSeed: string;
+  /** Names and theme colors; the main hall is the entry with id MAIN_HALL. */
+  collections: Collection[];
   exhibits: Exhibit[];
 };
+
+/** A group of works with its own wing. Its color themes the wing's rooms. */
+export type Collection = { id: string; name: string; color: string };
+
+/** The main hall, behind the atrium's stair, holds works that aren't in a collection. */
+export const MAIN_HALL = "main";
+
+/** Theme colors offered for new collections, in order. */
+export const COLLECTION_COLORS = ["#6fd3e0", "#ff7a59", "#b28dff", "#f2c14e", "#5fd68a", "#ff5c8a", "#4f8cff", "#e8e6f0"];
 
 /** What the lab sends when exhibiting or editing; the server fills in the rest. */
 export type ExhibitInput = {
   title: string;
   statement: string;
-  wing: string;
+  /** null: the main hall. */
+  collection: string | null;
   hero: boolean;
   live: boolean;
   /** Longest side in meters. */
   longSide: number;
 };
 
+/** The lab's view of a collection, with how many works it holds. */
+export type LabCollection = Collection & { position: number; count: number };
+
 /** The lab's view of its own exhibits. */
 export type LabExhibit = ExhibitInput & { id: string; outputId: string; position: number; size: Size2D; createdAt: number };
 
-export const DEFAULT_WING = "Main";
 export const MAX_STATEMENT = 2000;
 
 /** Longest side in meters. */
@@ -98,4 +113,5 @@ export function isAnimated(code: string, engine: Engine): boolean {
   return /\$genart\.setUpdate\s*\(/.test(code);
 }
 
-export const cleanWing = (w: unknown) => (typeof w === "string" ? w.trim().slice(0, 60) : "") || DEFAULT_WING;
+export const cleanName = (n: unknown) => (typeof n === "string" ? n.trim().slice(0, 60) : "");
+export const isColor = (c: unknown): c is string => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);

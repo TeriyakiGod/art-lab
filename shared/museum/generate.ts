@@ -1,4 +1,4 @@
-import { GENERATOR_VERSION, type Exhibit, type Manifest } from "./manifest";
+import { GENERATOR_VERSION, MAIN_HALL, type Exhibit, type Manifest } from "./manifest";
 import { ATRIUM, LEVEL_HEIGHT } from "./atrium";
 import { rng, shuffle, type Rng } from "./rng";
 
@@ -86,6 +86,9 @@ export const EYE_HEIGHT = 1.65;
 export const GALLERY_HEIGHT = 4.6;
 const CORRIDOR_HEIGHT = DOOR_HEIGHT;
 const GALLERY_SIZES: [number, number][] = [[12, 10], [10, 12], [14, 9], [9, 14], [11, 11], [16, 10], [8, 12], [12, 8], [13, 13]];
+/** The main hall's first room: bigger and taller than a gallery. */
+const MAIN_SIZES: [number, number][] = [[18, 13], [16, 14], [20, 12], [14, 12]];
+const MAIN_HEIGHT = 5.4;
 const CORRIDOR_LENGTHS = [2, 3, 4, 5];
 const FALLBACK_CORRIDOR_LENGTHS = [2, 3, 4, 5, 6, 8, 10, 12, 14, 16];
 /** Distance from a wall's line to the face of a work hung on it. */
@@ -251,8 +254,12 @@ function floorSlotsFor(room: Room): FloorSlot[] {
 export const placementOrder = (exhibits: Exhibit[]) =>
   [...exhibits].sort((a, b) => a.position - b.position || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
 
-export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): FloorPlan {
+/** The wing a work belongs to: its collection, or the main hall. */
+export const wingOf = (e: Pick<Exhibit, "collection">) => e.collection ?? MAIN_HALL;
+
+export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits"> & Partial<Pick<Manifest, "collections">>): FloorPlan {
   const seed = manifest.layoutSeed;
+  const themes = new Map((manifest.collections ?? []).map((c) => [c.id, c.color]));
   const rooms: Room[] = [];
   const doors: Door[] = [];
   const slots: WallSlot[] = [];
@@ -274,9 +281,10 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
   const atrium = addRoom({
     type: "atrium", wing: null, level: 0, rect: { ...ATRIUM.rect }, height: ATRIUM.height,
     accent: "#e8e6f0", parent: null, entrance: null,
-    // Ports for wings on both levels, in the order wings claim them.
-    exits: shuffle(ATRIUM.ports.map((p) => ({ ...p, width: DOOR_WIDTH })), atriumRng),
+    // Ports for wings on both levels, in the order wings claim them; the main hall's port last.
+    exits: [...shuffle(ATRIUM.ports.map((p) => ({ ...p, width: DOOR_WIDTH })), atriumRng), { ...ATRIUM.mainPort }],
   });
+  const mainPort = atrium.exits.length - 1;
   // Heroes take the atrium's hero walls in a seeded order.
   const heroOrder = shuffle(runs.get(atrium.id)!, atriumRng);
   runs.set(atrium.id, heroOrder);
@@ -288,35 +296,41 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
    * Tries to grow a corridor and a new gallery off `parent` through one of its free exits on
    * `level`. The gallery must have room on its walls for `e`, the work that needs it.
    */
-  const grow = (parent: Room, level: number, e: Exhibit, r: Rng, lengths: number[], accent: string): Room | null => {
-    const wing = e.wing;
+  const grow = (
+    parent: Room, level: number, e: Exhibit, r: Rng, lengths: number[], accent: string,
+    opts: { exits?: number[]; sizes?: [number, number][]; height?: number } = {},
+  ): Room | null => {
+    const wing = wingOf(e);
     const used = usedExits.get(parent.id)!;
     const lens = shuffle(lengths.slice(0, 4), r).concat(lengths.slice(4));
-    const sizes = shuffle(GALLERY_SIZES, r);
+    const sizes = opts.sizes ?? shuffle(GALLERY_SIZES, r);
+    const height = opts.height ?? GALLERY_HEIGHT;
     for (let ei = 0; ei < parent.exits.length; ei++) {
       const exit = parent.exits[ei];
       if (used.has(ei) || exit.level !== level) continue;
+      if (opts.exits ? !opts.exits.includes(ei) : parent.id === atrium.id && ei === mainPort) continue;
+      const width = exit.width;
       for (const len of lens) {
         const corridor = corridorRect(parent.rect, exit, len);
         if (!fits(corridor, level, [parent.id])) continue;
         for (const [along, depth] of sizes) {
-          const centered = Math.floor((along - DOOR_WIDTH) / 2);
-          for (const offset of [centered, 2, along - DOOR_WIDTH - 2]) {
+          const centered = Math.floor((along - width) / 2);
+          for (const offset of [centered, 2, along - width - 2]) {
             const rect = roomBeyond(corridor, exit.side, along, depth, offset);
             if (!fits(rect, level, [])) continue;
             const entranceSide = OPPOSITE[exit.side];
-            const entrance = { side: entranceSide, start: offset, width: DOOR_WIDTH, level };
+            const entrance = { side: entranceSide, start: offset, width, level };
             const exits = galleryExits(rect, entranceSide, level, rng(seed, wing, parent.id, ei, along, depth, offset));
-            const draft = { id: -1, type: "gallery", wing, level, rect, height: GALLERY_HEIGHT, accent, parent: -1, entrance, exits } satisfies Room;
+            const draft = { id: -1, type: "gallery", wing, level, rect, height, accent, parent: -1, entrance, exits } satisfies Room;
             if (!hang(draft, runsFor(draft), e)) continue;
             used.add(ei);
             const c = addRoom({
               type: "corridor", wing, level, rect: corridor, height: CORRIDOR_HEIGHT, accent, parent: parent.id,
-              entrance: { side: entranceSide, start: 0, width: DOOR_WIDTH, level },
-              exits: [{ side: exit.side, start: 0, width: DOOR_WIDTH, level }],
+              entrance: { side: entranceSide, start: 0, width, level },
+              exits: [{ side: exit.side, start: 0, width, level }],
             });
             usedExits.get(c.id)!.add(0);
-            const room = addRoom({ type: "gallery", wing, level, rect, height: GALLERY_HEIGHT, accent, parent: c.id, entrance, exits });
+            const room = addRoom({ type: "gallery", wing, level, rect, height, accent, parent: c.id, entrance, exits });
             doors.push(doorBetween(parent, exit, c.id), doorBetween(c, c.exits[0], room.id));
             return room;
           }
@@ -334,18 +348,20 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
       const slot = hang(atrium, heroOrder, e);
       if (slot) { slots.push(slot); continue; }
     }
-    const list = wingRooms.get(e.wing) ?? [];
+    const wing = wingOf(e);
+    const list = wingRooms.get(wing) ?? [];
     const current = list.length ? rooms[list[list.length - 1]] : null;
     const slot = current && hang(current, runs.get(current.id)!, e);
     if (slot) { slots.push(slot); continue; }
 
-    // A new room for this wing: off its own rooms (newest first), or the atrium's next free port for
-    // a new wing; as a last resort off any room on the wing's level, with longer corridors.
-    const r = rng(seed, e.wing, list.length);
-    const accent = accentFrom(e.palette, r);
+    // A new room for this wing: off its own rooms (newest first), or for a new wing the atrium's next
+    // free port (the main hall has its own, behind the stair); as a last resort off any room on the
+    // wing's level, with longer corridors. A collection's theme color is its rooms' accent.
+    const r = rng(seed, wing, list.length);
+    const accent = themes.get(wing) ?? accentFrom(e.palette, r);
     let room: Room | null = null;
     if (list.length) {
-      const level = wingLevel.get(e.wing)!;
+      const level = wingLevel.get(wing)!;
       for (const id of [...list].reverse()) if ((room = grow(rooms[id], level, e, r, CORRIDOR_LENGTHS, accent))) break;
       if (!room) {
         for (const p of rooms) {
@@ -354,6 +370,9 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
       }
     } else {
       const used = usedExits.get(atrium.id)!;
+      if (wing === MAIN_HALL) {
+        room = grow(atrium, 0, e, r, [2, 3], accent, { exits: [mainPort], sizes: MAIN_SIZES, height: MAIN_HEIGHT });
+      }
       for (let i = 0; i < atrium.exits.length && !room; i++) {
         if (used.has(i)) continue;
         const level = atrium.exits[i].level;
@@ -366,9 +385,9 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits">): F
       }
     }
     if (!room) { unplaced.push(e.id); continue; }
-    wingLevel.set(e.wing, room.level);
+    wingLevel.set(wing, room.level);
     list.push(room.id);
-    wingRooms.set(e.wing, list);
+    wingRooms.set(wing, list);
     const placed = hang(room, runs.get(room.id)!, e);
     if (placed) slots.push(placed);
     else unplaced.push(e.id);

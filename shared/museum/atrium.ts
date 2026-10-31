@@ -15,11 +15,16 @@ export const ATRIUM = {
   /** Balconies run along the east, south and west walls at LEVEL_HEIGHT; the north wall is the water wall. */
   balconyDepth: 4,
   slab: 0.4,
-  /** Doorways for wings, in cells from each side's low end. Two per side on the ground, two per balcony side upstairs. */
+  /**
+   * Doorways for collection wings, in cells from each side's low end: two per side on the ground
+   * (not the south, which belongs to the main hall) and two per balcony side upstairs.
+   */
   ports: [
-    ...(["N", "E", "S", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 0 }))),
+    ...(["N", "E", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 0 }))),
     ...(["E", "S", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 1 }))),
   ],
+  /** The main hall's doorway: 4 m wide, centered in the south wall, right behind the stair. */
+  mainPort: { side: "S" as Side, start: 10, width: 4, level: 0 },
   /** Hero walls: the stretch between each side's two ports. Ground ones sit under the balconies. */
   heroes: [
     { side: "E" as Side, level: 0, maxTop: 5.3, maxView: 6 },

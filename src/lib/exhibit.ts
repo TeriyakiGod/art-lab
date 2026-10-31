@@ -1,5 +1,5 @@
 import type { Output } from "../../shared/types";
-import { IMAGE_SIZES, type ExhibitInput, type ImageSize, type LabExhibit } from "../../shared/museum/manifest";
+import { IMAGE_SIZES, type ExhibitInput, type ImageSize, type LabCollection, type LabExhibit } from "../../shared/museum/manifest";
 import { api, json } from "./api";
 
 export const listExhibits = () => api<LabExhibit[]>("/exhibits");
@@ -31,3 +31,11 @@ export async function exhibitOutput(output: Output, input: ExhibitInput): Promis
 
 export const updateExhibit = (id: string, input: ExhibitInput) => api<LabExhibit>(`/exhibits/${id}`, json(input, "PATCH"));
 export const removeExhibit = (id: string) => api(`/exhibits/${id}`, { method: "DELETE" });
+
+export const listCollections = () => api<LabCollection[]>("/collections");
+export const createCollection = (name: string, color: string) => api<LabCollection>("/collections", json({ name, color }));
+export const updateCollection = (id: string, patch: { name?: string; color?: string }) => api(`/collections/${id}`, json(patch, "PATCH"));
+export const deleteCollection = (id: string) => api<{ moved: number }>(`/collections/${id}`, { method: "DELETE" });
+
+/** The public museum, where exhibits are shown. */
+export const MUSEUM_URL = "https://art.kacperochnik.eu";

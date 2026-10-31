@@ -166,6 +166,15 @@ The output is a `FloorPlan`: rooms (cells, type, accent color), doors, wall segm
 with exact positions, and a spawn point. A property test checks the stability promise: for
 random manifests, `generate(first N works)` must be a prefix of `generate(first N+1)`.
 
+### Collections and the main hall
+
+Works are grouped into collections, managed in the lab's **Museum** tab. Each collection gets its
+own wing (keyed by the collection's id, so renaming one moves nothing), and its theme color becomes
+the wing's accent: light lines, halos, room-light tint and a slight wall and floor tint. Works
+without a collection hang in the main hall, a larger, taller room through a 4 m doorway centered in
+the atrium's south wall, right behind the stair; the south wall's side ports were taken out of the
+pool so nothing else can claim that space.
+
 ### The atrium and levels
 
 The atrium is the one handcrafted room (`shared/museum/atrium.ts`): 24 × 24 m and 15 m tall, a water

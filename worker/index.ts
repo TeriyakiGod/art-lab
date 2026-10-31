@@ -4,8 +4,8 @@ import { getUser, type User } from "./auth";
 import type { Engine, Output, Palette, Sketch, Version } from "../shared/types";
 import { MAX_PALETTE_COLORS, isHexColor } from "../shared/palettes";
 import {
-  IMAGE_SIZES, MAX_STATEMENT, cleanWing, imageKey, physicalSize,
-  type ExhibitInput, type ImageSize, type LabExhibit,
+  IMAGE_SIZES, MAIN_HALL, MAX_STATEMENT, cleanName, imageKey, isColor, physicalSize,
+  type ExhibitInput, type ImageSize, type LabCollection, type LabExhibit,
 } from "../shared/museum/manifest";
 
 export { ChatAgent } from "./agent";
@@ -165,13 +165,13 @@ app.delete("/outputs/:id", async (c) => {
 
 // Exhibits: outputs shown in the public museum. The museum Worker only reads them.
 type ExhibitRow = {
-  id: string; output_id: string; wing: string; title: string; statement: string; hero: number; live: number;
+  id: string; output_id: string; collection_id: string | null; title: string; statement: string; hero: number; live: number;
   size: string; position: number; created_at: number;
 };
 const toLabExhibit = (r: ExhibitRow): LabExhibit => {
   const size = JSON.parse(r.size) as LabExhibit["size"];
   return {
-    id: r.id, outputId: r.output_id, wing: r.wing, title: r.title, statement: r.statement, hero: !!r.hero, live: !!r.live,
+    id: r.id, outputId: r.output_id, collection: r.collection_id, title: r.title, statement: r.statement, hero: !!r.hero, live: !!r.live,
     size, longSide: Math.max(size.w, size.h), position: r.position, createdAt: r.created_at,
   };
 };
@@ -179,13 +179,15 @@ const toLabExhibit = (r: ExhibitRow): LabExhibit => {
 const deleteExhibitImages = (env: Env, id: string) =>
   env.BUCKET.delete((Object.keys(IMAGE_SIZES) as ImageSize[]).map((s) => imageKey(id, s)));
 
-/** Validates what the lab sends; null if it's unusable. */
-function parseExhibitInput(v: Partial<ExhibitInput>): ExhibitInput | null {
+/** Validates what the lab sends; null if it's unusable. The collection must be the user's (null: main hall). */
+async function parseExhibitInput(env: Env, user: string, v: Partial<ExhibitInput>): Promise<ExhibitInput | null> {
   const title = typeof v.title === "string" ? v.title.trim().slice(0, 120) : "";
   const longSide = Number(v.longSide);
   if (!title || !(longSide >= 0.2 && longSide <= 10)) return null;
+  let collection: string | null = typeof v.collection === "string" && v.collection !== MAIN_HALL ? v.collection : null;
+  if (collection && !(await env.DB.prepare("SELECT 1 FROM collections WHERE id = ? AND user_id = ?").bind(collection, user).first())) collection = null;
   return {
-    title, wing: cleanWing(v.wing), longSide, hero: !!v.hero, live: v.live !== false,
+    title, collection, longSide, hero: !!v.hero, live: v.live !== false,
     statement: typeof v.statement === "string" ? v.statement.trim().slice(0, MAX_STATEMENT) : "",
   };
 }
@@ -198,7 +200,7 @@ const nextPosition = async (env: Env) =>
   ((await env.DB.prepare("SELECT MAX(position) AS p FROM exhibits").first<{ p: number | null }>())?.p ?? -1) + 1;
 
 app.get("/exhibits", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM exhibits WHERE user_id = ? ORDER BY wing, position")
+  const { results } = await c.env.DB.prepare("SELECT * FROM exhibits WHERE user_id = ? ORDER BY position")
     .bind(c.get("user").id).all<ExhibitRow>();
   return c.json(results.map(toLabExhibit));
 });
@@ -207,7 +209,7 @@ app.get("/exhibits", async (c) => {
 app.post("/exhibits", async (c) => {
   const form = await c.req.formData();
   const meta = JSON.parse(String(form.get("meta") ?? "{}")) as Partial<ExhibitInput> & { outputId?: string };
-  const input = parseExhibitInput(meta);
+  const input = await parseExhibitInput(c.env, c.get("user").id, meta);
   const images = (Object.keys(IMAGE_SIZES) as ImageSize[]).map((s) => [s, form.get(s)] as const);
   if (!input || images.some(([, f]) => !(f instanceof File) || f.type !== "image/webp" || f.size > 15_000_000)) {
     return c.json({ error: "expected a title, a size and WebP images" }, 400);
@@ -227,33 +229,33 @@ app.post("/exhibits", async (c) => {
   const now = Date.now();
   const assets = Object.fromEntries(images.map(([s]) => [s, imageKey(id, s)]));
   const row: ExhibitRow = {
-    id, output_id: meta.outputId!, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
+    id, output_id: meta.outputId!, collection_id: input.collection, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
     size: JSON.stringify(physicalSize(output.width, output.height, input.longSide)), position: await nextPosition(c.env), created_at: now,
   };
   await c.env.DB.prepare(
-    `INSERT INTO exhibits (id, output_id, user_id, wing, title, statement, hero, live, medium, size, assets, position, updated_at, created_at)
+    `INSERT INTO exhibits (id, output_id, user_id, collection_id, title, statement, hero, live, medium, size, assets, position, updated_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2d', ?, ?, ?, ?, ?)`,
-  ).bind(id, row.output_id, user, row.wing, row.title, row.statement, row.hero, row.live, row.size, JSON.stringify(assets), row.position, now, now).run();
+  ).bind(id, row.output_id, user, row.collection_id, row.title, row.statement, row.hero, row.live, row.size, JSON.stringify(assets), row.position, now, now).run();
   return c.json(toLabExhibit(row));
 });
 
 app.patch("/exhibits/:id", async (c) => {
-  const input = parseExhibitInput(await c.req.json<Partial<ExhibitInput>>());
-  if (!input) return c.json({ error: "expected a title and a size" }, 400);
   const user = c.get("user").id;
+  const input = await parseExhibitInput(c.env, user, await c.req.json<Partial<ExhibitInput>>());
+  if (!input) return c.json({ error: "expected a title and a size" }, 400);
   const row = await c.env.DB.prepare(
     "SELECT e.*, o.width, o.height FROM exhibits e JOIN outputs o ON o.id = e.output_id WHERE e.id = ? AND e.user_id = ?",
   ).bind(c.req.param("id"), user).first<ExhibitRow & { width: number; height: number }>();
   if (!row) return c.notFound();
-  // Moving to another wing appends there, so the new wing's existing rooms stay put.
-  const position = input.wing === row.wing ? row.position : await nextPosition(c.env);
+  // Moving to another collection appends there, so the new wing's existing rooms stay put.
+  const position = input.collection === row.collection_id ? row.position : await nextPosition(c.env);
   const updated: ExhibitRow = {
-    ...row, wing: input.wing, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
+    ...row, collection_id: input.collection, title: input.title, statement: input.statement, hero: +input.hero, live: +input.live,
     size: JSON.stringify(physicalSize(row.width, row.height, input.longSide)), position,
   };
   await c.env.DB.prepare(
-    "UPDATE exhibits SET wing = ?, title = ?, statement = ?, hero = ?, live = ?, size = ?, position = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-  ).bind(updated.wing, updated.title, updated.statement, updated.hero, updated.live, updated.size, position, Date.now(), row.id, user).run();
+    "UPDATE exhibits SET collection_id = ?, title = ?, statement = ?, hero = ?, live = ?, size = ?, position = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+  ).bind(updated.collection_id, updated.title, updated.statement, updated.hero, updated.live, updated.size, position, Date.now(), row.id, user).run();
   return c.json(toLabExhibit(updated));
 });
 
@@ -265,6 +267,61 @@ app.delete("/exhibits/:id", async (c) => {
     await c.env.DB.prepare("DELETE FROM exhibits WHERE id = ?").bind(id).run();
   }
   return c.json({ ok: true });
+});
+
+// Collections: each gets a wing in the museum, themed with its color. The 'main' row is the main hall.
+type CollectionRow = { id: string; name: string; color: string; position: number; count: number };
+const toCollection = (r: CollectionRow): LabCollection => ({ id: r.id, name: r.name, color: r.color, position: r.position, count: r.count });
+
+const ensureMainHall = (env: Env, user: string) =>
+  env.DB.prepare("INSERT OR IGNORE INTO collections (id, user_id, name, color, position, updated_at, created_at) VALUES (?, ?, 'Main hall', '#e8e6f0', -1, ?, ?)")
+    .bind(MAIN_HALL, user, Date.now(), Date.now()).run();
+
+app.get("/collections", async (c) => {
+  const user = c.get("user").id;
+  await ensureMainHall(c.env, user);
+  const { results } = await c.env.DB.prepare(
+    `SELECT c.id, c.name, c.color, c.position,
+       (SELECT COUNT(*) FROM exhibits e WHERE e.user_id = c.user_id AND (e.collection_id = c.id OR (c.id = ? AND e.collection_id IS NULL))) AS count
+     FROM collections c WHERE c.user_id = ? ORDER BY c.position, c.created_at`,
+  ).bind(MAIN_HALL, user).all<CollectionRow>();
+  return c.json(results.map(toCollection));
+});
+
+app.post("/collections", async (c) => {
+  const v = await c.req.json<{ name?: string; color?: string }>();
+  const name = cleanName(v.name);
+  if (!name || !isColor(v.color)) return c.json({ error: "expected a name and a #rrggbb color" }, 400);
+  const user = c.get("user").id;
+  const position = ((await c.env.DB.prepare("SELECT MAX(position) AS p FROM collections WHERE user_id = ?").bind(user).first<{ p: number | null }>())?.p ?? 0) + 1;
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await c.env.DB.prepare("INSERT INTO collections (id, user_id, name, color, position, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, user, name, v.color, position, now, now).run();
+  return c.json(toCollection({ id, name, color: v.color, position, count: 0 }));
+});
+
+app.patch("/collections/:id", async (c) => {
+  const v = await c.req.json<{ name?: string; color?: string }>();
+  const name = cleanName(v.name);
+  if ((v.name !== undefined && !name) || (v.color !== undefined && !isColor(v.color))) return c.json({ error: "bad name or color" }, 400);
+  const user = c.get("user").id;
+  if (c.req.param("id") === MAIN_HALL) await ensureMainHall(c.env, user);
+  await c.env.DB.prepare("UPDATE collections SET name = COALESCE(?, name), color = COALESCE(?, color), updated_at = ? WHERE id = ? AND user_id = ?")
+    .bind(name || null, v.color ?? null, Date.now(), c.req.param("id"), user).run();
+  return c.json({ ok: true });
+});
+
+// Deleting a collection moves its works to the main hall, appended in their existing order.
+app.delete("/collections/:id", async (c) => {
+  const id = c.req.param("id");
+  if (id === MAIN_HALL) return c.json({ error: "the main hall can't be deleted" }, 400);
+  const user = c.get("user").id;
+  const { results } = await c.env.DB.prepare("SELECT id FROM exhibits WHERE collection_id = ? AND user_id = ? ORDER BY position").bind(id, user).all<{ id: string }>();
+  let next = await nextPosition(c.env);
+  const moves = results.map((r) => c.env.DB.prepare("UPDATE exhibits SET collection_id = NULL, position = ?, updated_at = ? WHERE id = ?").bind(next++, Date.now(), r.id));
+  await c.env.DB.batch([...moves, c.env.DB.prepare("DELETE FROM collections WHERE id = ? AND user_id = ?").bind(id, user)]);
+  return c.json({ ok: true, moved: results.length });
 });
 
 type PaletteRow = { id: string; name: string; colors: string; updated_at: number; created_at: number };

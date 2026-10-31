@@ -7,6 +7,6 @@ import { WallArt } from "./WallArt";
  * How each medium is shown (plan §9). 3D works will add PlinthArt, SculptureArt and ImmersiveArt
  * here, placed in floor slots.
  */
-export const DISPLAYS: Record<Medium, ComponentType<{ exhibit: Exhibit; slot: WallSlot; accent: string }>> = {
+export const DISPLAYS: Record<Medium, ComponentType<{ exhibit: Exhibit; slot: WallSlot; accent: string; collection: string }>> = {
   "2d": WallArt,
 };

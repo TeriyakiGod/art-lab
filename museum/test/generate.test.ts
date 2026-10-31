@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { generate, sameLevel, sideLength, type FloorPlan, type Rect } from "../../shared/museum/generate";
+import { generate, sameLevel, sideLength, wingOf, type FloorPlan, type Rect } from "../../shared/museum/generate";
+import { ATRIUM } from "../../shared/museum/atrium";
 import { isWalkable, neighbors, viewpoint } from "../../shared/museum/floorplan";
 import type { Exhibit } from "../../shared/museum/manifest";
 import { rng } from "../../shared/museum/rng";
@@ -14,7 +15,8 @@ function collection(seed: string, n: number, wings: number): Exhibit[] {
     const aspect = [1, 1, 0.75, 1.5, 0.6][Math.floor(r() * 5)];
     const size = aspect >= 1 ? { w: long, h: +(long / aspect).toFixed(3) } : { w: +(long * aspect).toFixed(3), h: long };
     return {
-      id: `e${i}`, title: `Work ${i}`, statement: "", wing: `Wing ${Math.floor(r() * wings)}`, position: i,
+      // Collection 0 stands for "no collection": the main hall.
+      id: `e${i}`, title: `Work ${i}`, statement: "", collection: ((n) => (n === 0 ? null : `c${n}`))(Math.floor(r() * wings)), position: i,
       hero: r() < 0.05, live: true, engine: "canvas", seed: String(i), palette: palettes[i % palettes.length],
       animated: false, createdAt: 1_700_000_000_000 + i, medium: "2d", size,
       images: { "1k": "", "2k": "" },
@@ -136,7 +138,7 @@ describe("generate", () => {
         for (const s of full.slots) {
           const room = full.rooms[s.room];
           if (room.type === "atrium") expect(byId.get(s.exhibitId)!.hero).toBe(true);
-          else expect(room.wing).toBe(byId.get(s.exhibitId)!.wing);
+          else expect(room.wing).toBe(wingOf(byId.get(s.exhibitId)!));
         }
       });
 
@@ -147,6 +149,36 @@ describe("generate", () => {
       });
     });
   }
+});
+
+describe("collections", () => {
+  const works = collection("halls", 120, 6);
+  const themed = generate({ layoutSeed: "test", exhibits: works, collections: [{ id: "c1", name: "One", color: "#ff0000" }] });
+
+  it("hangs works without a collection in the main hall, through the doorway behind the stair", () => {
+    const hall = themed.rooms.find((r) => r.type === "gallery" && r.wing === "main")!;
+    expect(hall).toBeDefined();
+    const corridor = themed.rooms[hall.parent!];
+    expect(corridor.parent).toBe(0);
+    // The corridor leaves the atrium's south wall, centered on the 4 m main port.
+    const { x, y, d } = ATRIUM.rect;
+    expect(corridor.rect.y).toBe(y + d);
+    expect(corridor.rect.x).toBe(x + ATRIUM.mainPort.start);
+    expect(corridor.rect.w).toBe(ATRIUM.mainPort.width);
+    expect(hall.height).toBeGreaterThan(5);
+  });
+
+  it("never gives the main hall's doorway to a collection", () => {
+    for (const r of themed.rooms.filter((r) => r.type === "corridor" && r.parent === 0 && r.wing !== "main")) {
+      expect(r.rect.w === ATRIUM.mainPort.width && r.rect.x === ATRIUM.rect.x + ATRIUM.mainPort.start).toBe(false);
+    }
+  });
+
+  it("themes a collection's rooms with its color", () => {
+    const rooms = themed.rooms.filter((r) => r.wing === "c1");
+    expect(rooms.length).toBeGreaterThan(0);
+    for (const r of rooms) expect(r.accent).toBe("#ff0000");
+  });
 });
 
 describe("props", () => {

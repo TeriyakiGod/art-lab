@@ -3,6 +3,7 @@ import { api } from "./lib/api";
 import { pullSketches, pushPending } from "./lib/store";
 import { pullPalettes, pushPalettes } from "./lib/palettes";
 import { Gallery } from "./ui/Gallery";
+import { MuseumAdmin } from "./ui/MuseumAdmin";
 import { Home } from "./ui/Home";
 import { LessonList, LessonPage } from "./ui/Learn";
 import { ReferencePage } from "./ui/Reference";
@@ -83,6 +84,7 @@ export function App() {
   else if (route === "learn" && param) page = <LessonPage id={param} done={done} onComplete={completeLesson} />;
   else if (route === "learn") page = <LessonList done={done} />;
   else if (route === "gallery") page = <Gallery />;
+  else if (route === "museum") page = <MuseumAdmin />;
   else if (route === "reference") page = <ReferencePage focus={param ? decodeURIComponent(param) : undefined} />;
   else page = <Home done={done} />;
 
@@ -93,6 +95,7 @@ export function App() {
         <nav className="topnav">
           <a href="#/" className={!route ? "on" : ""}>Sketches</a>
           <a href="#/gallery" className={route === "gallery" ? "on" : ""}>Gallery</a>
+          <a href="#/museum" className={route === "museum" ? "on" : ""}>Museum</a>
           <a href="#/learn" className={route === "learn" ? "on" : ""}>Learn</a>
           <a href="#/reference" className={route === "reference" ? "on" : ""}>Reference</a>
         </nav>

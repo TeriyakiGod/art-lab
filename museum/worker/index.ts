@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import type { Engine } from "../../shared/types";
 import { PALETTE_KEY, isHexColor } from "../../shared/palettes";
 import {
-  GENERATOR_VERSION, IMAGE_SIZES, imageKey, isAnimated,
-  type Exhibit, type ImageSize, type Manifest,
+  GENERATOR_VERSION, IMAGE_SIZES, MAIN_HALL, imageKey, isAnimated,
+  type Collection, type Exhibit, type ImageSize, type Manifest,
 } from "../../shared/museum/manifest";
 
 // Public and read-only: everything here is visible to anyone. Never read outputs that aren't exhibited,
@@ -11,7 +11,7 @@ import {
 const app = new Hono<{ Bindings: Env }>().basePath("/api");
 
 type Row = {
-  id: string; wing: string; title: string; statement: string; hero: number; live: number; medium: string;
+  id: string; collection_id: string | null; title: string; statement: string; hero: number; live: number; medium: string;
   size: string; position: number; created_at: number;
   code: string; engine: string; seed: string; param_values: string; width: number; height: number;
 };
@@ -23,7 +23,7 @@ function toExhibit(r: Row): Exhibit {
   const palette = values[PALETTE_KEY];
   const engine = asEngine(r.engine);
   return {
-    id: r.id, title: r.title, statement: r.statement, wing: r.wing, position: r.position, hero: !!r.hero, live: !!r.live,
+    id: r.id, title: r.title, statement: r.statement, collection: r.collection_id, position: r.position, hero: !!r.hero, live: !!r.live,
     engine, seed: r.seed, animated: isAnimated(r.code, engine), createdAt: r.created_at,
     palette: Array.isArray(palette) ? palette.filter(isHexColor).slice(0, 6) : [],
     medium: "2d",
@@ -32,14 +32,20 @@ function toExhibit(r: Row): Exhibit {
   };
 }
 
-const EXHIBIT_QUERY = `SELECT e.id, e.wing, e.title, e.statement, e.hero, e.live, e.medium, e.size, e.position, e.created_at,
+const EXHIBIT_QUERY = `SELECT e.id, e.collection_id, e.title, e.statement, e.hero, e.live, e.medium, e.size, e.position, e.created_at,
   o.code, o.engine, o.seed, o.param_values, o.width, o.height FROM exhibits e JOIN outputs o ON o.id = e.output_id`;
 
 app.get("/manifest", async (c) => {
-  const { results } = await c.env.DB.prepare(`${EXHIBIT_QUERY} ORDER BY e.position`).all<Row>();
+  const [{ results }, collections] = await Promise.all([
+    c.env.DB.prepare(`${EXHIBIT_QUERY} ORDER BY e.position`).all<Row>(),
+    c.env.DB.prepare("SELECT id, name, color FROM collections ORDER BY position, created_at").all<Collection>(),
+  ]);
   const manifest: Manifest = {
     generatorVersion: GENERATOR_VERSION,
     layoutSeed: c.env.LAYOUT_SEED,
+    collections: collections.results.some((x) => x.id === MAIN_HALL)
+      ? collections.results
+      : [{ id: MAIN_HALL, name: "Main hall", color: "#e8e6f0" }, ...collections.results],
     exhibits: results.filter((r) => r.medium === "2d").map(toExhibit),
   };
   return c.json(manifest, 200, { "cache-control": "public, max-age=60" });

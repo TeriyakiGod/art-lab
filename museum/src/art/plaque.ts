@@ -61,7 +61,7 @@ function wrap(g: CanvasRenderingContext2D, text: string, width: number, maxLines
 }
 
 /** Draws the plaque's text: title, wing and date, statement, and the facts (with the visitor's re-roll). */
-export function plaqueTexture(e: Exhibit, rerolled?: string) {
+export function plaqueTexture(e: Exhibit, collection: string, rerolled?: string) {
   const W = 960, H = Math.round(W * PLAQUE.aspect);
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
@@ -78,7 +78,7 @@ export function plaqueTexture(e: Exhibit, rerolled?: string) {
   y += 78;
   g.fillStyle = "#a3a2b0";
   g.font = font(54, 500);
-  g.fillText(`${e.wing.toUpperCase()} · ${new Date(e.createdAt).getFullYear()}`, pad, y);
+  g.fillText(`${collection.toUpperCase()} · ${new Date(e.createdAt).getFullYear()}`, pad, y);
   y += 84;
   if (e.statement) {
     g.fillStyle = "#dcdbe4";
