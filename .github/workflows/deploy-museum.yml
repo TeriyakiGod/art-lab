@@ -5,9 +5,9 @@ name: Deploy museum
 on:
   push:
     branches: [main]
-    paths: ["museum/**", "shared/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
+    paths: ["museum/**", "shared/**", "src/runtime/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
   pull_request:
-    paths: ["museum/**", "shared/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
+    paths: ["museum/**", "shared/**", "src/runtime/**", "package-lock.json", ".github/workflows/deploy-museum.yml"]
   workflow_dispatch:
 
 concurrency:

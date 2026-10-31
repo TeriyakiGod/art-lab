@@ -240,9 +240,32 @@
     new p5(); // no sketch argument: global mode, using window.setup/draw
   };
 
+  // Streaming: the museum shows live sketches by asking for frames as ImageBitmaps, sized down to
+  // maxSize and transferred (not copied), at most `fps` a second.
+  let streamTimer;
+  let inFlight = false;
+  const stream = (fps, maxSize) => {
+    clearInterval(streamTimer);
+    if (!fps) return;
+    streamTimer = setInterval(async () => {
+      const el = mainCanvas || document.querySelector("canvas");
+      if (!el || !el.width || inFlight) return;
+      const k = Math.min(1, maxSize / Math.max(el.width, el.height));
+      inFlight = true;
+      try {
+        const bitmap = await createImageBitmap(el, {
+          resizeWidth: Math.round(el.width * k), resizeHeight: Math.round(el.height * k), resizeQuality: "medium", imageOrientation: "flipY",
+        });
+        parent.postMessage({ type: "lab:frame", channel: cfg.channel, bitmap }, "*", [bitmap]);
+      } catch { /* canvas not ready yet */ }
+      inFlight = false;
+    }, 1000 / fps);
+  };
+
   window.addEventListener("message", (e) => {
     if (e.source !== parent || e.data?.channel !== cfg.channel) return;
     if (e.data.type === "lab:capture-request") capture(undefined, e.data.maxSize, e.data.format, e.data.quality);
+    if (e.data.type === "lab:stream") stream(e.data.fps, e.data.maxSize ?? 1024);
   });
 
   // ---- beginner helpers ----------------------------------------------------------

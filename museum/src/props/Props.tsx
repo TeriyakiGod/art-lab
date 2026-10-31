@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { BoxGeometry, Euler, Matrix4, Quaternion, Vector3, type BufferGeometry } from "three";
+import { useMemo, useRef } from "react";
+import { BoxGeometry, Euler, Group, Matrix4, Quaternion, Vector3, type BufferGeometry } from "three";
+import { useShowWhenNear } from "../world/nearby";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
 import { BENCH_DEPTH, SEAT_HEIGHT, type Prop } from "../../../shared/museum/props";
@@ -38,8 +39,45 @@ function benchParts(bench: Bench) {
 
 const merge = (parts: BufferGeometry[]) => (parts.length ? mergeGeometries(parts) : null);
 
-/** All plants, trees, ivy and benches: built once from the prop list, a handful of draw calls in total. */
+type Mats = ReturnType<typeof makeMaterials>;
+const makeMaterials = () => ({
+  leaf: leafMaterial(), pot: vertexColorMaterial(0.7), bark: vertexColorMaterial(0.9), planter: vertexColorMaterial(0.65),
+  wood: woodMaterial(), steel: steelMaterial(), stone: stoneMaterial(),
+});
+
+/**
+ * All plants, trees, ivy and benches, built once from the prop list: a handful of draw calls per room,
+ * and only for rooms that are near.
+ */
 export function Props({ props }: { props: Prop[] }) {
+  const mats = useMemo(makeMaterials, []);
+  const benches = props.filter((p): p is Bench => p.kind === "bench");
+  const rooms = useMemo(() => {
+    const by = new Map<number, Prop[]>();
+    for (const p of props) by.set(p.room, [...(by.get(p.room) ?? []), p]);
+    return [...by];
+  }, [props]);
+
+  return (
+    <group>
+      {rooms.map(([room, list]) => <PropsChunk key={room} room={room} props={list} benches={benches} mats={mats} />)}
+      <RigidBody type="fixed" colliders={false}>
+        {props.map((p, i) => {
+          if (p.kind === "ivy") return null;
+          if (p.kind === "bench") {
+            return <CuboidCollider key={i} args={[p.length / 2, SEAT_HEIGHT / 2, BENCH_DEPTH / 2]} position={[p.x, p.y + SEAT_HEIGHT / 2, p.z]} rotation={[0, p.yaw, 0]} />;
+          }
+          return <CylinderCollider key={i} args={[0.4, p.r]} position={[p.x, p.y + 0.4, p.z]} />;
+        })}
+      </RigidBody>
+    </group>
+  );
+}
+
+/** One room's props. `benches` is the museum-wide list, so seat numbers match the Player's. */
+function PropsChunk({ room, props, benches, mats }: { room: number; props: Prop[]; benches: Bench[]; mats: Mats }) {
+  const group = useRef<Group>(null);
+  useShowWhenNear(group, room);
   const built = useMemo(() => {
     const leaves = new MeshBuilder(), pots = new MeshBuilder(), bark = new MeshBuilder(), planters = new MeshBuilder();
     const wood: BufferGeometry[] = [], steel: BufferGeometry[] = [], stone: BufferGeometry[] = [];
@@ -64,15 +102,10 @@ export function Props({ props }: { props: Prop[] }) {
     };
   }, [props]);
 
-  const mats = useMemo(() => ({
-    leaf: leafMaterial(), pot: vertexColorMaterial(0.7), bark: vertexColorMaterial(0.9), planter: vertexColorMaterial(0.65),
-    wood: woodMaterial(), steel: steelMaterial(), stone: stoneMaterial(),
-  }), []);
-
-  const benches = props.filter((p): p is Bench => p.kind === "bench");
+  const own = props.filter((p): p is Bench => p.kind === "bench");
 
   return (
-    <group>
+    <group ref={group} visible={false}>
       <mesh geometry={built.leaves} material={mats.leaf} castShadow receiveShadow />
       <mesh geometry={built.pots} material={mats.pot} castShadow receiveShadow />
       <mesh geometry={built.bark} material={mats.bark} castShadow receiveShadow />
@@ -82,22 +115,13 @@ export function Props({ props }: { props: Prop[] }) {
       {built.stone && <mesh geometry={built.stone} material={mats.stone} castShadow receiveShadow />}
 
       {/* Invisible boxes the crosshair can find, to offer a seat. */}
-      {benches.map((b, i) => (
-        <mesh key={i} position={[b.x, b.y + SEAT_HEIGHT / 2, b.z]} rotation={[0, b.yaw, 0]} userData={{ seat: i }}>
+      {own.map((b) => (
+        <mesh key={benches.indexOf(b)} position={[b.x, b.y + SEAT_HEIGHT / 2, b.z]} rotation={[0, b.yaw, 0]} userData={{ seat: benches.indexOf(b) }}>
           <boxGeometry args={[b.length, SEAT_HEIGHT + 0.1, BENCH_DEPTH + 0.1]} />
           <meshBasicMaterial visible={false} />
         </mesh>
       ))}
 
-      <RigidBody type="fixed" colliders={false}>
-        {props.map((p, i) => {
-          if (p.kind === "ivy") return null;
-          if (p.kind === "bench") {
-            return <CuboidCollider key={i} args={[p.length / 2, SEAT_HEIGHT / 2, BENCH_DEPTH / 2]} position={[p.x, p.y + SEAT_HEIGHT / 2, p.z]} rotation={[0, p.yaw, 0]} />;
-          }
-          return <CylinderCollider key={i} args={[0.4, p.r]} position={[p.x, p.y + 0.4, p.z]} />;
-        })}
-      </RigidBody>
     </group>
   );
 }

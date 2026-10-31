@@ -10,7 +10,10 @@ import { hash, rng, shuffle } from "./rng";
 
 export type PlantSpecies = "blades" | "arching" | "round";
 
-export type Prop =
+/** Every prop belongs to a room, so it can be drawn only when that room is near. */
+export type Prop = { room: number } & PropShape;
+
+type PropShape =
   | { kind: "plant"; species: PlantSpecies; x: number; y: number; z: number; scale: number; seed: number; r: number }
   | { kind: "tree"; x: number; y: number; z: number; height: number; planter: number; seed: number; r: number }
   | {
@@ -26,11 +29,11 @@ export const SEAT_HEIGHT = 0.46;
 const POT_INSET = 0.6;
 const SPECIES: PlantSpecies[] = ["blades", "arching", "round"];
 
-function galleryProps(room: Room, plan: FloorPlan, seed: string): Prop[] {
+function galleryProps(room: Room, plan: FloorPlan, seed: string): PropShape[] {
   const r = rng(seed, "props", room.id);
   const { x, y, w, d } = room.rect;
   const fy = floorY(room.level);
-  const props: Prop[] = [];
+  const props: PropShape[] = [];
   // Plants in two or three of the four corners, which art and doorways always leave free.
   const corners = shuffle([[x + POT_INSET, y + POT_INSET], [x + w - POT_INSET, y + POT_INSET], [x + POT_INSET, y + d - POT_INSET], [x + w - POT_INSET, y + d - POT_INSET]], r);
   const count = w * d >= 140 ? 3 : 2;
@@ -49,8 +52,8 @@ function galleryProps(room: Room, plan: FloorPlan, seed: string): Prop[] {
 }
 
 /** The atrium's props are placed by hand. */
-function atriumProps(seed: string): Prop[] {
-  const props: Prop[] = [];
+function atriumProps(seed: string): PropShape[] {
+  const props: PropShape[] = [];
   const h = (...p: (string | number)[]) => hash(seed, "atrium", ...p);
   for (const t of ATRIUM.trees) props.push({ kind: "tree", x: t.x, y: 0, z: t.z, height: t.height, planter: t.planter, seed: h("tree", t.x), r: t.planter + 0.1 });
   // Benches facing the water wall, and under the east and west balconies facing the hero walls.
@@ -82,7 +85,9 @@ function atriumProps(seed: string): Prop[] {
 }
 
 export function propsFor(plan: FloorPlan, seed: string): Prop[] {
-  return plan.rooms.flatMap((room) => (room.type === "atrium" ? atriumProps(seed) : room.type === "gallery" ? galleryProps(room, plan, seed) : []));
+  return plan.rooms.flatMap((room) =>
+    (room.type === "atrium" ? atriumProps(seed) : room.type === "gallery" ? galleryProps(room, plan, seed) : []).map((p) => ({ ...p, room: room.id })),
+  );
 }
 
 /** Seats people can sit on: each bench, with its center, direction and length. */

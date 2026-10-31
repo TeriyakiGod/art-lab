@@ -13,7 +13,7 @@ const app = new Hono<{ Bindings: Env }>().basePath("/api");
 type Row = {
   id: string; wing: string; title: string; statement: string; hero: number; live: number; medium: string;
   size: string; position: number; created_at: number;
-  code: string; engine: string; seed: string; param_values: string;
+  code: string; engine: string; seed: string; param_values: string; width: number; height: number;
 };
 
 const asEngine = (e: unknown): Engine => (e === "p5" ? "p5" : "canvas");
@@ -33,7 +33,7 @@ function toExhibit(r: Row): Exhibit {
 }
 
 const EXHIBIT_QUERY = `SELECT e.id, e.wing, e.title, e.statement, e.hero, e.live, e.medium, e.size, e.position, e.created_at,
-  o.code, o.engine, o.seed, o.param_values FROM exhibits e JOIN outputs o ON o.id = e.output_id`;
+  o.code, o.engine, o.seed, o.param_values, o.width, o.height FROM exhibits e JOIN outputs o ON o.id = e.output_id`;
 
 app.get("/manifest", async (c) => {
   const { results } = await c.env.DB.prepare(`${EXHIBIT_QUERY} ORDER BY e.position`).all<Row>();
@@ -49,7 +49,7 @@ app.get("/manifest", async (c) => {
 app.get("/exhibits/:id/sketch", async (c) => {
   const r = await c.env.DB.prepare(`${EXHIBIT_QUERY} WHERE e.id = ? AND e.live = 1`).bind(c.req.param("id")).first<Row>();
   if (!r) return c.notFound();
-  return c.json({ code: r.code, engine: asEngine(r.engine), seed: r.seed, values: JSON.parse(r.param_values) }, 200, {
+  return c.json({ code: r.code, engine: asEngine(r.engine), seed: r.seed, values: JSON.parse(r.param_values), width: r.width, height: r.height }, 200, {
     "cache-control": "public, max-age=60",
   });
 });

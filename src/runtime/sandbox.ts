@@ -68,7 +68,9 @@ export type SandboxMessage =
   | { type: "lab:log"; channel: string; level: string; text: string }
   | { type: "lab:capture"; channel: string; blob?: Blob; width?: number; height?: number; error?: string }
   | { type: "lab:traits"; channel: string; traits: Record<string, unknown> }
-  | { type: "lab:done"; channel: string };
+  | { type: "lab:done"; channel: string }
+  /** A streamed frame (see `lab:stream` in lab-runtime.js). The receiver must close() it. */
+  | { type: "lab:frame"; channel: string; bitmap: ImageBitmap };
 
 export interface ParamSpec {
   type: string;

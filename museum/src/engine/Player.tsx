@@ -169,10 +169,11 @@ export function Player({ plan, benches, net, start }: Props) {
   const pickable = useRef<Object3D[]>([]);
   useEffect(() => {
     const id = setInterval(() => {
+      // Only what's drawn: far rooms are hidden, and testing every wall in the museum each frame is slow.
       const found: Object3D[] = [];
-      scene.traverse((o) => (o.userData.exhibitId || o.userData.occluder || o.userData.seat !== undefined) && found.push(o));
+      scene.traverseVisible((o) => (o.userData.exhibitId || o.userData.occluder || o.userData.seat !== undefined) && found.push(o));
       pickable.current = found;
-    }, 1000);
+    }, 500);
     return () => clearInterval(id);
   }, [scene]);
 

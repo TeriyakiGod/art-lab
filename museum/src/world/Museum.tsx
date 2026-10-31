@@ -11,6 +11,7 @@ import { Atrium } from "./Atrium";
 import { Lighting } from "./Lighting";
 import { Effects } from "./Effects";
 import { AdaptiveResolution } from "./AdaptiveResolution";
+import { Director } from "./Director";
 import { Props } from "../props/Props";
 import { Player } from "../engine/Player";
 import { attachInput, clearInput } from "../engine/input";
@@ -90,6 +91,7 @@ export default function Museum({ plan, props, exhibits, start }: Props_) {
     >
       <color attach="background" args={[BACKGROUND]} />
       <Lighting plan={plan} />
+      <Director plan={plan} exhibits={exhibits} />
       <PointerLock />
       <Physics timeStep={1 / 60} gravity={[0, -9.81, 0]}>
         <Building plan={plan} />

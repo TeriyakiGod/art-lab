@@ -1,11 +1,12 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
-import { BoxGeometry, Color, InstancedMesh, Matrix4, PlaneGeometry, Quaternion, Vector3, type Material } from "three";
+import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, PlaneGeometry, Quaternion, Vector3, type Material } from "three";
+import { useShowWhenNear } from "./nearby";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { DOOR_WIDTH, WALL_THICKNESS, floorY, type FloorPlan, type Room, type Wall } from "../../../shared/museum/generate";
 import { ceilingMaterial, floorMaterial, lightMaterial, wallMaterial } from "./materials";
 
-/** One transform (and optional color) per instance. */
-type Instance = { p: [number, number, number]; s: [number, number, number]; rx?: number; color?: string };
+/** One transform (and optional color) per instance, and the room it belongs to. */
+type Instance = { room: number; p: [number, number, number]; s: [number, number, number]; rx?: number; color?: string };
 
 const T = WALL_THICKNESS;
 const isAlongX = (w: Wall) => Math.abs(w.z1 - w.z2) < 1e-6;
@@ -22,6 +23,7 @@ function wallInstances(plan: FloorPlan): Instance[] {
     const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) + T; // + T closes the corners
     const h = w.y1 - w.y0;
     return {
+      room: w.room,
       p: [(w.x1 + w.x2) / 2, (w.y0 + w.y1) / 2, (w.z1 + w.z2) / 2],
       s: isAlongX(w) ? [len, h, T] : [T, h, len],
       color: TONES[plan.rooms[w.room].type].wall,
@@ -30,7 +32,7 @@ function wallInstances(plan: FloorPlan): Instance[] {
 }
 
 const floors = (rooms: Room[], y: (r: Room) => number, rx: number, color: (r: Room) => string): Instance[] =>
-  rooms.map((r) => ({ p: [r.rect.x + r.rect.w / 2, y(r), r.rect.y + r.rect.d / 2], s: [r.rect.w, r.rect.d, 1], rx, color: color(r) }));
+  rooms.map((r) => ({ room: r.id, p: [r.rect.x + r.rect.w / 2, y(r), r.rect.y + r.rect.d / 2], s: [r.rect.w, r.rect.d, 1], rx, color: color(r) }));
 
 /** Thin lines of light along the top and foot of every gallery wall, and down the middle of corridors. */
 function stripInstances(plan: FloorPlan): Instance[] {
@@ -46,17 +48,17 @@ function stripInstances(plan: FloorPlan): Instance[] {
     const off = T / 2 + 0.02;
     const [ox, oz] = isAlongX(w) ? [0, Math.sign(cz - mz) * off] : [Math.sign(cx - mx) * off, 0];
     const s: [number, number, number] = isAlongX(w) ? [len, 0.035, 0.035] : [0.035, 0.035, len];
-    out.push({ p: [mx + ox, base + room.height - 0.25, mz + oz], s, color: room.accent });
-    out.push({ p: [mx + ox, base + 0.06, mz + oz], s, color: room.accent });
+    out.push({ room: room.id, p: [mx + ox, base + room.height - 0.25, mz + oz], s, color: room.accent });
+    out.push({ room: room.id, p: [mx + ox, base + 0.06, mz + oz], s, color: room.accent });
   }
   for (const r of plan.rooms.filter((r) => r.type === "corridor")) {
     const alongX = r.rect.w > r.rect.d;
     const { x, y, w, d } = r.rect, base = floorY(r.level);
-    out.push({ p: [x + w / 2, base + r.height - 0.02, y + d / 2], s: alongX ? [w, 0.03, 0.06] : [0.06, 0.03, d], color: r.accent });
+    out.push({ room: r.id, p: [x + w / 2, base + r.height - 0.02, y + d / 2], s: alongX ? [w, 0.03, 0.06] : [0.06, 0.03, d], color: r.accent });
     // Lines along the foot of both side walls lead the way through.
     for (const side of [-1, 1]) {
       const off = side * (DOOR_WIDTH / 2 - T / 2 - 0.03);
-      out.push({ p: [x + w / 2 + (alongX ? 0 : off), base + 0.05, y + d / 2 + (alongX ? off : 0)], s: alongX ? [w, 0.025, 0.025] : [0.025, 0.025, d], color: r.accent });
+      out.push({ room: r.id, p: [x + w / 2 + (alongX ? 0 : off), base + 0.05, y + d / 2 + (alongX ? off : 0)], s: alongX ? [w, 0.025, 0.025] : [0.025, 0.025, d], color: r.accent });
     }
   }
   return out;
@@ -74,7 +76,8 @@ type InstancesProps = {
 function Instances({ items, geometry, material, occluder, shadows }: InstancesProps) {
   const ref = useRef<InstancedMesh>(null);
   useLayoutEffect(() => {
-    const mesh = ref.current!;
+    const mesh = ref.current;
+    if (!mesh) return;
     const m = new Matrix4(), q = new Quaternion(), axis = new Vector3(1, 0, 0), c = new Color();
     items.forEach((it, i) => {
       q.setFromAxisAngle(axis, it.rx ?? 0);
@@ -86,11 +89,29 @@ function Instances({ items, geometry, material, occluder, shadows }: InstancesPr
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
   }, [items]);
+  if (!items.length) return null;
   return (
     <instancedMesh
-      ref={ref} args={[geometry, material, items.length]} frustumCulled={false} userData={{ occluder }}
+      ref={ref} args={[geometry, material, items.length]} userData={{ occluder }}
       castShadow={shadows} receiveShadow={shadows}
     />
+  );
+}
+
+type Parts = { walls: Instance[]; floors: Instance[]; ceilings: Instance[]; strips: Instance[] };
+type Shared = { box: BoxGeometry; plane: PlaneGeometry; wallMaterial: Material; floorMaterial: Material; ceilingMaterial: Material; stripMaterial: Material };
+
+/** One room's surfaces, drawn only while the room is near (so a big museum costs no more than a small one). */
+function RoomChunk({ room, parts, shared }: { room: number; parts: Parts; shared: Shared }) {
+  const group = useRef<Group>(null);
+  useShowWhenNear(group, room);
+  return (
+    <group ref={group} visible={false}>
+      <Instances items={parts.walls} geometry={shared.box} material={shared.wallMaterial} occluder shadows />
+      <Instances items={parts.floors} geometry={shared.plane} material={shared.floorMaterial} shadows />
+      <Instances items={parts.ceilings} geometry={shared.plane} material={shared.ceilingMaterial} shadows />
+      <Instances items={parts.strips} geometry={shared.box} material={shared.stripMaterial} />
+    </group>
   );
 }
 
@@ -119,13 +140,15 @@ export function Building({ plan }: { plan: FloorPlan }) {
     return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
   }, [plan]);
   const upstairs = plan.rooms.filter((r) => r.level > 0);
+  const chunks = useMemo(() => {
+    const by = new Map<number, Parts>(plan.rooms.map((r) => [r.id, { walls: [], floors: [], ceilings: [], strips: [] }]));
+    for (const k of ["walls", "floors", "ceilings", "strips"] as const) for (const it of parts[k]) by.get(it.room)![k].push(it);
+    return [...by];
+  }, [plan, parts]);
 
   return (
     <>
-      <Instances items={parts.walls} geometry={parts.box} material={parts.wallMaterial} occluder shadows />
-      <Instances items={parts.floors} geometry={parts.plane} material={parts.floorMaterial} shadows />
-      <Instances items={parts.ceilings} geometry={parts.plane} material={parts.ceilingMaterial} shadows />
-      <Instances items={parts.strips} geometry={parts.box} material={parts.stripMaterial} />
+      {chunks.map(([room, p]) => <RoomChunk key={room} room={room} parts={p} shared={parts} />)}
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider
           args={[(bounds.x1 - bounds.x0) / 2 + 2, 0.5, (bounds.z1 - bounds.z0) / 2 + 2]}

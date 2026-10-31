@@ -2,30 +2,53 @@ import { useEffect, useMemo, useState } from "react";
 import type { Texture } from "three";
 import type { WallSlot } from "../../../shared/museum/generate";
 import type { Exhibit } from "../../../shared/museum/manifest";
-import { loadArt } from "./textures";
+import { acquireArt, releaseArt } from "./textures";
+import { live, useLive } from "./live";
+import { useNearby } from "../world/nearby";
 import { useUi } from "../ui/store";
 import { haloMaterial } from "../world/materials";
 
-/** A 2D work floating a few centimeters off its wall. Unlit, so the art is the brightest thing in the room. */
+/**
+ * A 2D work floating a few centimeters off its wall. Unlit, so the art is the brightest thing in the
+ * room. Shows the live sketch when one is running for it, the image otherwise; draws nothing at all
+ * when its room is far away.
+ */
 export function WallArt({ exhibit, slot, accent }: { exhibit: Exhibit; slot: WallSlot; accent: string }) {
-  const halo = useMemo(() => haloMaterial(accent), [accent]);
   const focused = useUi((s) => s.focused === exhibit.id);
+  const near = useNearby(slot.room);
+  return near || focused ? <ShownArt exhibit={exhibit} slot={slot} accent={accent} focused={focused} /> : null;
+}
+
+function ShownArt({ exhibit, slot, accent, focused }: { exhibit: Exhibit; slot: WallSlot; accent: string; focused: boolean }) {
+  const halo = useMemo(() => haloMaterial(accent), [accent]);
+  useEffect(() => () => halo.dispose(), [halo]);
   const [texture, setTexture] = useState<Texture | null>(null);
+  useLive();
+  const liveTexture = live.texture(exhibit.id);
 
   useEffect(() => {
-    let live = true;
-    void loadArt(exhibit.images["1k"]).then((t) => live && setTexture((cur) => cur ?? t));
-    return () => void (live = false);
+    let mounted = true;
+    const url = exhibit.images["1k"];
+    void acquireArt(url).then((t) => mounted && setTexture((cur) => cur ?? t));
+    return () => {
+      mounted = false;
+      releaseArt(url);
+    };
   }, [exhibit.images]);
 
   // The sharper copy once someone looks closely.
   useEffect(() => {
     if (!focused) return;
-    let live = true;
-    void loadArt(exhibit.images["2k"]).then((t) => live && setTexture(t));
-    return () => void (live = false);
+    let mounted = true;
+    const url = exhibit.images["2k"];
+    void acquireArt(url).then((t) => mounted && setTexture(t));
+    return () => {
+      mounted = false;
+      releaseArt(url);
+    };
   }, [focused, exhibit.images]);
 
+  const shown = liveTexture ?? texture;
   return (
     <group position={[slot.x, slot.y, slot.z]} rotation={[0, Math.atan2(slot.nx, slot.nz), 0]}>
       {/* A soft glow of the room's accent on the wall behind it. */}
@@ -43,7 +66,7 @@ export function WallArt({ exhibit, slot, accent }: { exhibit: Exhibit; slot: Wal
           A new material per texture: WebGPU materials are compiled for the maps they have, and R3F
           would reset a dropped prop (like color) to black if one element switched between the two.
         */}
-        <meshBasicMaterial key={texture?.uuid ?? "empty"} map={texture} color={texture ? "#ffffff" : "#15151b"} toneMapped={false} />
+        <meshBasicMaterial key={shown?.uuid ?? "empty"} map={shown} color={shown ? "#ffffff" : "#15151b"} toneMapped={false} />
       </mesh>
     </group>
   );

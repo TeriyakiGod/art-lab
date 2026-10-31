@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { BoxGeometry, PlaneGeometry } from "three";
+import { useMemo, useRef } from "react";
+import { BoxGeometry, Group, PlaneGeometry } from "three";
+import { useShowWhenNear } from "./nearby";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { ATRIUM, LEVEL_HEIGHT, balconies, railings } from "../../../shared/museum/atrium";
 import {
@@ -24,6 +25,9 @@ function Box({ x0, x1, y0, y1, z0, z1, material, cast = true, receive = true }: 
 
 /** The handcrafted heart of the museum. Wings attach to its ports; this draws everything inside. */
 export function Atrium() {
+  const group = useRef<Group>(null);
+  // The atrium is room 0; from deep in a wing it isn't drawn at all.
+  useShowWhenNear(group, 0);
   const m = useMemo(() => ({
     ceiling: ceilingMaterial(), skylight: skylightMaterial(), concrete: concreteMaterial(), floor: floorMaterial("#5c5852"),
     glass: glassMaterial(), steel: steelMaterial(), stone: stoneMaterial(), wood: woodMaterial(),
@@ -41,7 +45,7 @@ export function Atrium() {
   const x0 = rect.x, x1 = rect.x + rect.w, z0 = rect.y, z1 = rect.y + rect.d, b = ATRIUM.balconyDepth;
 
   return (
-    <group>
+    <group ref={group} visible={false}>
       {/* Ceiling with a skylight over the open middle. */}
       <mesh position={[0, height, (z0 + z1 - b) / 2]} rotation={[Math.PI / 2, 0, 0]} material={m.skylight}>
         <planeGeometry args={[x1 - x0 - 2 * b, z1 - z0 - b]} />

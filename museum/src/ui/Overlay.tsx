@@ -4,6 +4,7 @@ import { ui, useUi } from "./store";
 import { lockPointer } from "../engine/pointer";
 import { settings, useSettings } from "./settings";
 import { ambience } from "../audio/ambience";
+import { live, useLive } from "../art/live";
 
 type Props = { manifest: Manifest | null; error: boolean; exhibits: Map<string, Exhibit> };
 
@@ -28,15 +29,18 @@ export function Overlay({ manifest, error, exhibits }: Props) {
         else if (s.walking && s.hovered) { ui.set({ focused: s.hovered }); void document.exitPointerLock(); }
         else if (s.walking && s.hoveredSeat !== null) ui.set({ seated: s.hoveredSeat });
       } else if (e.code === "Escape" && s.focused) unfocus();
+      else if (e.code === "KeyR" && s.focused && exhibits.get(s.focused)?.live) live.reroll(s.focused);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [exhibits]);
 
-  // The address bar always links to what you're looking at (once the museum is loaded).
+  // The address bar always links to what you're looking at, re-roll included (once the museum is loaded).
+  useLive();
+  const reroll = focused ? live.rerolled(focused) : undefined;
   useEffect(() => {
-    if (manifest) history.replaceState(null, "", focused ? `#/w/${focused}` : location.pathname);
-  }, [focused, manifest]);
+    if (manifest) history.replaceState(null, "", focused ? `#/w/${focused}${reroll ? `/${reroll}` : ""}` : location.pathname);
+  }, [focused, reroll, manifest]);
 
   const work = focused ? exhibits.get(focused) : hovered ? exhibits.get(hovered) : undefined;
 
@@ -118,6 +122,9 @@ const unfocus = () => ui.set({ focused: null });
 
 function FocusPanel({ exhibit }: { exhibit: Exhibit }) {
   const [copied, setCopied] = useState(false);
+  useLive();
+  const rerolled = live.rerolled(exhibit.id);
+  const status = live.status(exhibit.id);
   const copy = () => {
     void navigator.clipboard.writeText(location.href).then(() => {
       setCopied(true);
@@ -130,7 +137,12 @@ function FocusPanel({ exhibit }: { exhibit: Exhibit }) {
       <h2>{exhibit.title}</h2>
       {exhibit.statement && <p className="statement">{exhibit.statement}</p>}
       <dl className="facts">
-        <dt>Seed</dt><dd><code>{exhibit.seed}</code></dd>
+        <dt>Seed</dt>
+        <dd>
+          <code>{rerolled ?? exhibit.seed}</code>
+          {rerolled && <span className="muted small"> · your re-roll{status === "loading" ? ", rendering…" : ""}</span>}
+          {status === "error" && <span className="muted small"> · couldn't run live</span>}
+        </dd>
         <dt>Size</dt><dd>{exhibit.size.w} × {exhibit.size.h} m</dd>
         <dt>Engine</dt><dd>{exhibit.engine === "p5" ? "p5.js" : "Canvas"}</dd>
         <dt>Added</dt><dd>{new Date(exhibit.createdAt).toLocaleDateString()}</dd>
@@ -140,7 +152,20 @@ function FocusPanel({ exhibit }: { exhibit: Exhibit }) {
           {exhibit.palette.map((c) => <span key={c} style={{ background: c }} title={c} />)}
         </div>
       )}
-      <div className="actions">
+      {exhibit.live ? (
+        <div className="reroll">
+          <p className="muted small">
+            This work is a program. Run it with a new seed to see a version nobody has seen before.
+          </p>
+          <div className="actions">
+            <button onClick={() => live.reroll(exhibit.id)}>Re-roll <kbd>R</kbd></button>
+            {rerolled && <button onClick={() => live.original(exhibit.id)}>Show original</button>}
+          </div>
+        </div>
+      ) : (
+        <p className="muted small">The artist keeps this work's code private, so it can't be re-rolled.</p>
+      )}
+      <div className="actions bottom">
         <button className="enter" onClick={() => { unfocus(); if (settings.get().sound) ambience.start(); lockPointer(); }}>Back to walking <kbd>E</kbd></button>
         <button onClick={copy}>{copied ? "Link copied" : "Copy link"}</button>
       </div>
