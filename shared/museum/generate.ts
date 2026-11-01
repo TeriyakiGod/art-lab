@@ -371,7 +371,7 @@ export function generate(manifest: Pick<Manifest, "layoutSeed" | "exhibits"> & P
     } else {
       const used = usedExits.get(atrium.id)!;
       if (wing === MAIN_HALL) {
-        room = grow(atrium, 0, e, r, [2, 3], accent, { exits: [mainPort], sizes: MAIN_SIZES, height: MAIN_HEIGHT });
+        room = grow(atrium, ATRIUM.mainPort.level, e, r, [2, 3], accent, { exits: [mainPort], sizes: MAIN_SIZES, height: MAIN_HEIGHT });
       }
       for (let i = 0; i < atrium.exits.length && !room; i++) {
         if (used.has(i)) continue;

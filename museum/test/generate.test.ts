@@ -130,7 +130,8 @@ describe("generate", () => {
         const levels = new Map<string, Set<number>>();
         for (const r of full.rooms) if (r.wing) levels.set(r.wing, (levels.get(r.wing) ?? new Set()).add(r.level));
         for (const [wing, set] of levels) expect(set.size, wing).toBe(1);
-        if (wings >= 12) expect(full.rooms.some((r) => r.level === 1)).toBe(true);
+        // Every room is upstairs; the ground floor stays free.
+        for (const r of full.rooms) if (r.type !== "atrium") expect(r.level, `room ${r.id}`).toBe(1);
       });
 
       it("keeps each wing's galleries in that wing", () => {
@@ -155,7 +156,7 @@ describe("collections", () => {
   const works = collection("halls", 120, 6);
   const themed = generate({ layoutSeed: "test", exhibits: works, collections: [{ id: "c1", name: "One", color: "#ff0000" }] });
 
-  it("hangs works without a collection in the main hall, through the doorway behind the stair", () => {
+  it("hangs works without a collection in the main hall, through the doorway at the top of the stair", () => {
     const hall = themed.rooms.find((r) => r.type === "gallery" && r.wing === "main")!;
     expect(hall).toBeDefined();
     const corridor = themed.rooms[hall.parent!];
@@ -165,6 +166,7 @@ describe("collections", () => {
     expect(corridor.rect.y).toBe(y + d);
     expect(corridor.rect.x).toBe(x + ATRIUM.mainPort.start);
     expect(corridor.rect.w).toBe(ATRIUM.mainPort.width);
+    expect(hall.level).toBe(1);
     expect(hall.height).toBeGreaterThan(5);
   });
 

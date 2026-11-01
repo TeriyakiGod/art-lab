@@ -172,8 +172,9 @@ Works are grouped into collections, managed in the lab's **Museum** tab. Each co
 own wing (keyed by the collection's id, so renaming one moves nothing), and its theme color becomes
 the wing's accent: light lines, halos, room-light tint and a slight wall and floor tint. Works
 without a collection hang in the main hall, a larger, taller room through a 4 m doorway centered in
-the atrium's south wall, right behind the stair; the south wall's side ports were taken out of the
-pool so nothing else can claim that space.
+the balcony's south wall, straight ahead at the top of the stair. Every room is upstairs: wings open
+off the east and west balconies (and branch off each other once those four doorways are taken). The
+ground floor has no doorways; it's kept free for a shop and similar later.
 
 ### The atrium and levels
 

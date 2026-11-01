@@ -16,21 +16,18 @@ export const ATRIUM = {
   balconyDepth: 4,
   slab: 0.4,
   /**
-   * Doorways for collection wings, in cells from each side's low end: two per side on the ground
-   * (not the south, which belongs to the main hall) and two per balcony side upstairs.
+   * Doorways for collection wings, in cells from each side's low end: two on each of the east and
+   * west balconies. Every room is upstairs; the ground floor is kept free (for a shop, later).
    */
-  ports: [
-    ...(["N", "E", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 0 }))),
-    ...(["E", "S", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 1 }))),
-  ],
-  /** The main hall's doorway: 4 m wide, centered in the south wall, right behind the stair. */
-  mainPort: { side: "S" as Side, start: 10, width: 4, level: 0 },
+  ports: (["E", "W"] as Side[]).flatMap((side) => [4, 17].map((start) => ({ side, start, level: 1 }))),
+  /** The main hall's doorway: 4 m wide, centered in the balcony's south wall, facing the top of the stair. */
+  mainPort: { side: "S" as Side, start: 10, width: 4, level: 1 },
   /** Hero walls: the stretch between each side's two ports. Ground ones sit under the balconies. */
   heroes: [
-    { side: "E" as Side, level: 0, maxTop: 5.3, maxView: 6 },
-    { side: "W" as Side, level: 0, maxTop: 5.3, maxView: 6 },
+    // Viewers stop 4.2 m out, in front of the benches facing these walls.
+    { side: "E" as Side, level: 0, maxTop: 5.3, maxView: 4.2 },
+    { side: "W" as Side, level: 0, maxTop: 5.3, maxView: 4.2 },
     { side: "E" as Side, level: 1, maxTop: 8.6, maxView: 3.3 },
-    { side: "S" as Side, level: 1, maxTop: 8.6, maxView: 3.3 },
     { side: "W" as Side, level: 1, maxTop: 8.6, maxView: 3.3 },
   ],
   pool: { x0: -4.5, x1: 4.5, z0: -11.9, z1: -5, rim: 0.45, water: 0.36 },

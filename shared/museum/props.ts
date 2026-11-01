@@ -59,8 +59,9 @@ function atriumProps(seed: string): PropShape[] {
   // Benches facing the water wall, and under the east and west balconies facing the hero walls.
   props.push({ kind: "bench", x: -2.6, y: 0, z: -3.9, yaw: 0, length: 2.6, style: 1, seed: h("b1"), facing: -1 });
   props.push({ kind: "bench", x: 2.6, y: 0, z: -3.9, yaw: 0, length: 2.6, style: 1, seed: h("b2"), facing: -1 });
-  props.push({ kind: "bench", x: 9, y: 0, z: 0, yaw: Math.PI / 2, length: 3, style: 0, seed: h("b3"), facing: 1 });
-  props.push({ kind: "bench", x: -9, y: 0, z: 0, yaw: Math.PI / 2, length: 3, style: 0, seed: h("b4"), facing: -1 });
+  // Back by the balcony edge, so viewers stepping back from the hero walls stop in front of them.
+  props.push({ kind: "bench", x: 7, y: 0, z: 0, yaw: Math.PI / 2, length: 2.4, style: 0, seed: h("b3"), facing: 1 });
+  props.push({ kind: "bench", x: -7, y: 0, z: 0, yaw: Math.PI / 2, length: 2.4, style: 0, seed: h("b4"), facing: -1 });
   // Upstairs, by the south railing, looking out over the atrium to the water wall.
   props.push({ kind: "bench", x: -4.6, y: LEVEL_HEIGHT, z: 9.3, yaw: 0, length: 2.2, style: 0, seed: h("b5"), facing: -1 });
   props.push({ kind: "bench", x: 4.6, y: LEVEL_HEIGHT, z: 9.3, yaw: 0, length: 2.2, style: 0, seed: h("b6"), facing: -1 });
