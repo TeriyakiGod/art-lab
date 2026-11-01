@@ -6,6 +6,7 @@ import { propsFor } from "../../shared/museum/props";
 import { Overlay } from "./ui/Overlay";
 import { ui } from "./ui/store";
 import { live } from "./art/live";
+import { setCollections } from "./ui/names";
 
 // The 3D scene (three.js, Rapier) is the heavy part; the page shows first, the museum loads after.
 const Museum = lazy(() => import("./world/Museum"));
@@ -49,6 +50,9 @@ export function App() {
   const props = useMemo(() => (plan && manifest ? propsFor(plan, manifest.layoutSeed) : []), [plan, manifest]);
   if (import.meta.env.DEV && plan) Object.assign((window as unknown as { __museum: object }).__museum, { plan, props });
   const exhibits = useMemo(() => new Map(manifest?.exhibits.map((e) => [e.id, e])), [manifest]);
+  useEffect(() => {
+    if (manifest) setCollections(manifest.collections);
+  }, [manifest]);
 
   // Start in front of a linked work, focused on it; otherwise in the atrium.
   const linkedSlot = plan?.slots.find((s) => s.exhibitId === linkedExhibit);
@@ -66,7 +70,7 @@ export function App() {
           <Museum plan={plan} props={props} seed={manifest!.layoutSeed} collections={manifest!.collections} exhibits={exhibits} start={start} />
         </Suspense>
       )}
-      <Overlay manifest={manifest} error={error} exhibits={exhibits} />
+      <Overlay manifest={manifest} error={error} exhibits={exhibits} plan={plan} />
     </>
   );
 }

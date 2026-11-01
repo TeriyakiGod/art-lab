@@ -12,9 +12,14 @@ export type UiState = {
   hoveredSeat: number | null;
   /** The bench being sat on. */
   seated: number | null;
+  /** The device the visitor is using; decides hints and whether walking needs the mouse captured. */
+  mode: "mouse" | "touch" | "gamepad";
+  mapOpen: boolean;
+  /** The screen is fading through black (moving between rooms). */
+  fading: boolean;
 };
 
-let state: UiState = { walking: false, hovered: null, focused: null, hoveredSeat: null, seated: null };
+let state: UiState = { walking: false, hovered: null, focused: null, hoveredSeat: null, seated: null, mode: "mouse", mapOpen: false, fading: false };
 const listeners = new Set<() => void>();
 
 export const ui = {

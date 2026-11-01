@@ -15,6 +15,7 @@ import { Director } from "./Director";
 import { Props } from "../props/Props";
 import { Player } from "../engine/Player";
 import { attachInput, clearInput } from "../engine/input";
+import { attachTouch } from "../engine/touch";
 import { setMuseumCanvas } from "../engine/pointer";
 import { DISPLAYS } from "../art/registry";
 import { LocalAdapter } from "../net/NetAdapter";
@@ -33,7 +34,11 @@ function PointerLock() {
   const canvas = useThree((s) => s.gl.domElement);
   useEffect(() => {
     const detach = attachInput(canvas);
-    const onClick = () => {
+    const detachTouch = attachTouch(canvas);
+    const onClick = (e: MouseEvent) => {
+      // Taps are handled by the touch controls.
+      if ((e as PointerEvent).pointerType === "touch" || ui.get().mode === "touch") return;
+      ui.set({ mode: "mouse" });
       const { focused, hovered, hoveredSeat } = ui.get();
       // A click while looking closely goes back to walking.
       if (focused) {
@@ -52,7 +57,8 @@ function PointerLock() {
     const onChange = () => {
       const locked = document.pointerLockElement === canvas;
       if (!locked) clearInput();
-      ui.set({ walking: locked });
+      // With a mouse, walking means the pointer is captured; touch and gamepad walk without it.
+      if (ui.get().mode === "mouse") ui.set({ walking: locked });
     };
     canvas.addEventListener("click", onClick);
     document.addEventListener("pointerlockchange", onChange);
@@ -60,6 +66,7 @@ function PointerLock() {
     return () => {
       setMuseumCanvas(null);
       detach();
+      detachTouch();
       canvas.removeEventListener("click", onClick);
       document.removeEventListener("pointerlockchange", onChange);
     };

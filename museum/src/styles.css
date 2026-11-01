@@ -11,7 +11,8 @@
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); overflow: hidden; }
-canvas { display: block; }
+/* Touch drags are the joystick and look controls, not page scrolling. */
+canvas { display: block; touch-action: none; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85em; }
 button {
@@ -62,3 +63,45 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .crosshair-key { position: fixed; left: 50%; top: calc(50% + 14px); transform: translateX(-50%); font-size: 0.65rem; color: #fff; pointer-events: none; }
 .hints { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; gap: 18px; padding: 8px 18px; background: rgb(14 14 18 / 0.6); border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(8px); font-size: 0.8rem; color: #c9c8d2; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; }
 .hints kbd { margin-right: 4px; }
+
+/* ---- phase 4: touch, gamepad, map, tour ---- */
+.enter-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 30; }
+.fade.on { opacity: 1; }
+.joystick { position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.35); background: rgb(255 255 255 / 0.06); pointer-events: none; z-index: 20; }
+.joystick-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; border-radius: 50%; background: rgb(255 255 255 / 0.5); transform: translate(-50%, -50%); }
+.hud-buttons { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; z-index: 10; }
+.hud-buttons button { background: var(--panel); backdrop-filter: blur(8px); min-width: 44px; min-height: 44px; }
+.hints { pointer-events: auto; }
+.hint-button { background: transparent; border: none; padding: 6px 4px; color: inherit; font-size: inherit; min-height: 36px; }
+.hint-button:hover { color: #fff; }
+.map { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(6 6 8 / 0.6); backdrop-filter: blur(4px); z-index: 25; padding: 16px; }
+.map-card { width: min(900px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.map-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-levels { display: flex; gap: 4px; }
+.map-levels button { padding: 4px 12px; font-size: 0.85rem; color: var(--muted); }
+.map-levels button.on { color: var(--text); border-color: #55556a; }
+.map-svg { width: 100%; max-height: 70vh; background: #0a0a0d; border-radius: 10px; }
+.map-room { cursor: pointer; }
+.map-room:hover rect { fill-opacity: 0.4; }
+.spacer { flex: 1; }
+@media (max-width: 600px) {
+  .hints { gap: 6px; padding: 4px 10px; font-size: 0.75rem; bottom: 16px; }
+}
+
+/* ---- /list ---- */
+body:has(.list-page) { overflow: auto; }
+.list-page { max-width: 960px; margin: 0 auto; padding: 48px 16px 80px; }
+.list-page h1 { font-size: 2.4rem; font-weight: 200; letter-spacing: 0.35em; text-transform: uppercase; margin: 0 0 12px; }
+.list-page h2 { font-size: 0.85rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin: 48px 0 16px; padding-left: 10px; border-left: 3px solid; }
+.list-page .button { display: inline-block; padding: 8px 18px; border-radius: 999px; background: var(--text); color: var(--bg); text-decoration: none; }
+.list-page .notice { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.list-page a { color: var(--text); }
+.list-works { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 32px; }
+.list-works figure { margin: 0; display: grid; grid-template-columns: minmax(0, 400px) 1fr; gap: 24px; align-items: start; }
+.list-works img { width: 100%; height: auto; background: #0d0d11; display: block; }
+.list-works h3 { margin: 0 0 4px; font-weight: 400; font-size: 1.3rem; }
+.list-works p { margin: 0 0 8px; }
+@media (max-width: 700px) { .list-works figure { grid-template-columns: 1fr; } }
+.start a { color: var(--muted); }
+.start a:hover { color: var(--text); }

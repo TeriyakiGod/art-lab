@@ -9,6 +9,11 @@ import { focusFrame } from "../art/plaque";
 import { BENCH_DEPTH, SEAT_HEIGHT, type Prop } from "../../../shared/museum/props";
 import { IsLocal, Look, Position, world } from "./ecs";
 import { LOOK_SENSITIVITY, readIntent, takeLook } from "./input";
+import { requestTeleport, setPicker, takeTeleport } from "./actions";
+import { pollGamepad } from "./gamepad";
+import { roomAt } from "../../../shared/museum/floorplan";
+import { LEVEL_HEIGHT } from "../../../shared/museum/atrium";
+import { LOOK_SPEEDS, settings } from "../ui/settings";
 import { ui } from "../ui/store";
 import { ambience } from "../audio/ambience";
 import type { NetAdapter } from "../net/NetAdapter";
@@ -89,11 +94,10 @@ export function Player({ plan, benches, net, start }: Props) {
 
   const velocity = useRef({ x: 0, y: 0, z: 0 });
   // Dev only: lets headless tests stand anywhere and look anywhere.
-  const teleport = useRef<{ x: number; y: number; z: number; yaw: number; pitch: number } | null>(null);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const hook = (window as unknown as { __museum?: Record<string, unknown> }).__museum;
-    if (hook) hook.teleport = (x: number, y: number, z: number, yaw: number, pitch = 0) => void (teleport.current = { x, y, z, yaw, pitch });
+    if (hook) hook.teleport = (x: number, y: number, z: number, yaw: number, pitch = 0) => requestTeleport({ x, y, z, yaw, pitch });
   }, []);
   /** `turned` once the view has swung round to the seat's direction; then the mouse is free. */
   const sitting = useRef<{ bench: number; pose: ReturnType<typeof seatPose>; turned: boolean } | null>(null);
@@ -110,18 +114,19 @@ export function Player({ plan, benches, net, start }: Props) {
     const t = b.translation();
     const { focused, seated, walking } = ui.get();
 
-    if (teleport.current) {
-      const p = teleport.current;
-      teleport.current = null;
-      b.setNextKinematicTranslation({ x: p.x, y: p.y + CENTER, z: p.z });
-      entity.set(Look, { yaw: p.yaw, pitch: p.pitch });
+    const teleport = takeTeleport();
+    if (teleport) {
+      b.setNextKinematicTranslation({ x: teleport.x, y: teleport.y + CENTER, z: teleport.z });
+      entity.set(Look, { yaw: teleport.yaw, pitch: teleport.pitch ?? 0 });
+      velocity.current = { x: 0, y: 0, z: 0 };
     } else if (focused) {
-      // Glide to the spot square in front of the work, ignoring walls (it's in the same room); the
-      // camera's height is handled per frame, below.
+      // Glide to the spot square in front of the work; the camera's height is handled per frame,
+      // below. A work in another room (stepping through the tour) is jumped to, behind a fade.
       const slot = plan.slots.find((s) => s.exhibitId === focused);
       if (slot) {
         const f = focusFrame(slot, (camera as PerspectiveCamera).fov, (camera as PerspectiveCamera).aspect);
-        const k = 1 - Math.exp(-dt * 4);
+        const here = roomAt(plan, t.x, t.z, t.y - CENTER > LEVEL_HEIGHT - 1 ? 1 : 0)?.id;
+        const k = here !== slot.room || settings.get().reducedMotion ? 1 : 1 - Math.exp(-dt * 4);
         b.setNextKinematicTranslation({ x: t.x + (f.x - t.x) * k, y: t.y + (f.floor + CENTER - t.y) * k, z: t.z + (f.z - t.z) * k });
         entity.set(Look, { yaw: angleLerp(look.yaw, f.yaw, k), pitch: look.pitch * (1 - k) });
       }
@@ -166,6 +171,17 @@ export function Player({ plan, benches, net, start }: Props) {
   });
 
   const raycaster = useMemo(() => new Raycaster(), []);
+  // Taps pick what's under the finger, with the same rules as the crosshair.
+  useEffect(() => {
+    const pick = new Raycaster();
+    setPicker((x, y) => {
+      pick.setFromCamera(new Vector2(x, y), camera);
+      pick.far = LOOK_RANGE + 1;
+      const hit = pick.intersectObjects(pickable.current, false)[0];
+      return { exhibit: hit?.object.userData.exhibitId, seat: hit && hit.distance < SEAT_RANGE + 1 ? hit.object.userData.seat : undefined };
+    });
+    return () => setPicker(null);
+  }, [camera]);
   const center = useMemo(() => new Vector2(0, 0), []);
   const eyePos = useMemo(() => new Vector3(), []);
   const pickable = useRef<Object3D[]>([]);
@@ -182,25 +198,28 @@ export function Player({ plan, benches, net, start }: Props) {
   useFrame((_, delta) => {
     const entity = entityRef.current;
     if (!entity) return;
+    pollGamepad(Math.min(delta, 0.1));
     const { walking, focused, seated } = ui.get();
-    // Mouse look applies every rendered frame, not just on physics steps, so it never lags.
+    // Look applies every rendered frame, not just on physics steps, so it never lags.
     if (walking && !focused) {
       const { dx, dy } = takeLook();
       const look = entity.get(Look)!;
+      const k = LOOK_SENSITIVITY * LOOK_SPEEDS[settings.get().lookSpeed];
       entity.set(Look, {
-        yaw: look.yaw - dx * LOOK_SENSITIVITY,
-        pitch: Math.max(-1.4, Math.min(1.4, look.pitch - dy * LOOK_SENSITIVITY)),
+        yaw: look.yaw - dx * k,
+        pitch: Math.max(-1.4, Math.min(1.4, look.pitch - dy * k)),
       });
     } else takeLook();
 
     // The eye group is interpolated between physics steps by @react-three/rapier; sitting blends
     // the camera down onto the seat.
     eye.current!.getWorldPosition(eyePos);
-    sitBlend.current = Math.max(0, Math.min(1, sitBlend.current + (seated !== null && sitting.current ? delta : -delta) * 1.8));
+    const instant = settings.get().reducedMotion ? 1000 : 1;
+    sitBlend.current = Math.max(0, Math.min(1, sitBlend.current + (seated !== null && sitting.current ? delta : -delta) * 1.8 * instant));
     if (sitting.current && sitBlend.current > 0) eyePos.lerp(sitting.current.pose.eye, smooth(sitBlend.current));
     // Looking closely: the camera rises or sinks to the middle of the work and its plaque.
     const slot = focused ? plan.slots.find((s) => s.exhibitId === focused) : undefined;
-    focusBlend.current = Math.max(0, Math.min(1, focusBlend.current + (slot ? delta : -delta) * 1.2));
+    focusBlend.current = Math.max(0, Math.min(1, focusBlend.current + (slot ? delta : -delta) * 1.2 * instant));
     if (slot) {
       const f = focusFrame(slot, (camera as PerspectiveCamera).fov, (camera as PerspectiveCamera).aspect);
       focusEye.set(eyePos.x, f.eyeY, eyePos.z);
