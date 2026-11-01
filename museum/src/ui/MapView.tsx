@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ATRIUM, LEVEL_HEIGHT, balconies } from "../../../shared/museum/atrium";
 import { floorY, sameLevel, type FloorPlan, type Room } from "../../../shared/museum/generate";
-import { requestTeleport } from "../engine/actions";
-import { IsLocal, Look, Position, world } from "../engine/ecs";
+import { readPlayer, requestTeleport } from "../engine/actions";
 import { settings } from "./settings";
 import { ui } from "./store";
 import { useCollectionNames } from "./names";
@@ -29,9 +28,8 @@ export function MapView({ plan }: { plan: FloorPlan }) {
   const [me, setMe] = useState({ x: 0, z: 0, yaw: 0, level: 0 });
   useEffect(() => {
     const read = () => {
-      const e = world.queryFirst(IsLocal);
-      const p = e?.get(Position), l = e?.get(Look);
-      if (p && l) setMe({ x: p.x, z: p.z, yaw: l.yaw, level: p.y > LEVEL_HEIGHT / 2 ? 1 : 0 });
+      const p = readPlayer();
+      if (p) setMe({ x: p.x, z: p.z, yaw: p.yaw, level: p.y > LEVEL_HEIGHT / 2 ? 1 : 0 });
     };
     read();
     const id = setInterval(read, 200);

@@ -9,7 +9,7 @@ import { focusFrame } from "../art/plaque";
 import { BENCH_DEPTH, SEAT_HEIGHT, type Prop } from "../../../shared/museum/props";
 import { IsLocal, Look, Position, world } from "./ecs";
 import { LOOK_SENSITIVITY, readIntent, takeLook } from "./input";
-import { requestTeleport, setPicker, takeTeleport } from "./actions";
+import { requestTeleport, setPicker, setPlayerReader, takeTeleport } from "./actions";
 import { pollGamepad } from "./gamepad";
 import { roomAt } from "../../../shared/museum/floorplan";
 import { LEVEL_HEIGHT } from "../../../shared/museum/atrium";
@@ -171,6 +171,14 @@ export function Player({ plan, benches, net, start }: Props) {
   });
 
   const raycaster = useMemo(() => new Raycaster(), []);
+  useEffect(() => {
+    setPlayerReader(() => {
+      const e = entityRef.current;
+      const p = e?.get(Position), l = e?.get(Look);
+      return p && l ? { x: p.x, y: p.y, z: p.z, yaw: l.yaw, pitch: l.pitch } : null;
+    });
+    return () => setPlayerReader(null);
+  }, []);
   // Taps pick what's under the finger, with the same rules as the crosshair.
   useEffect(() => {
     const pick = new Raycaster();

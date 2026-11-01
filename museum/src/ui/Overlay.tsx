@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Exhibit, Manifest } from "../../../shared/museum/manifest";
 import type { FloorPlan } from "../../../shared/museum/generate";
-import { act, onAction, type Action } from "../engine/actions";
-import { IsLocal, Position, world } from "../engine/ecs";
+import { act, onAction, readPlayer, type Action } from "../engine/actions";
 import { MapView } from "./MapView";
 import { ui, useUi } from "./store";
 import { lockPointer } from "../engine/pointer";
@@ -220,7 +219,7 @@ export function Overlay({ manifest, error, exhibits, plan }: Props) {
 
 /** The work closest to where the visitor stands (to start touring from). */
 function nearestWork(plan: FloorPlan) {
-  const p = world.queryFirst(IsLocal)?.get(Position);
+  const p = readPlayer();
   if (!p) return undefined;
   const level = p.y > 3 ? 1 : 0;
   return plan.slots

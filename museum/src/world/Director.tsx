@@ -5,7 +5,8 @@ import { LEVEL_HEIGHT } from "../../../shared/museum/atrium";
 import type { FloorPlan } from "../../../shared/museum/generate";
 import { neighbors, roomAt } from "../../../shared/museum/floorplan";
 import type { Exhibit } from "../../../shared/museum/manifest";
-import { live, type Wanted } from "../art/live";
+import { live } from "../art/live";
+import { setWanted, type Wanted } from "../art/runner";
 import { nearby } from "./nearby";
 import { ui } from "../ui/store";
 import { useSettings } from "../ui/settings";
@@ -65,7 +66,7 @@ export function Director({ plan, exhibits }: { plan: FloorPlan; exhibits: Map<st
       const e = exhibits.get(s.exhibitId);
       if (e?.live && e.animated) wanted.push({ id: e.id, animated: true, seed: e.seed });
     }
-    live.setWanted(wanted.slice(0, MAX_LIVE[quality]));
+    setWanted(wanted.slice(0, MAX_LIVE[quality]));
   });
   return null;
 }

@@ -14,6 +14,12 @@ let picker: ((x: number, y: number) => Pick) | null = null;
 export const setPicker = (p: typeof picker) => void (picker = p);
 export const pickAt = (x: number, y: number): Pick => picker?.(x, y) ?? {};
 
+/** Where the visitor is and faces (feet position); registered by the Player, so the UI needn't load the ECS. */
+export type PlayerPose = { x: number; y: number; z: number; yaw: number; pitch: number };
+let reader: (() => PlayerPose | null) | null = null;
+export const setPlayerReader = (r: typeof reader) => void (reader = r);
+export const readPlayer = () => reader?.() ?? null;
+
 /** Moves the visitor; consumed by the Player on its next physics step. */
 export type Teleport = { x: number; y: number; z: number; yaw: number; pitch?: number };
 let pending: Teleport | null = null;
