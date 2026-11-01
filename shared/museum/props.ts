@@ -1,5 +1,5 @@
 import { ATRIUM, LEVEL_HEIGHT } from "./atrium";
-import { floorY, type FloorPlan, type Room } from "./generate";
+import { centerTree, floorY, type FloorPlan, type Room } from "./generate";
 import { hash, rng, shuffle } from "./rng";
 
 /**
@@ -15,7 +15,7 @@ export type Prop = { room: number } & PropShape;
 
 type PropShape =
   | { kind: "plant"; species: PlantSpecies; x: number; y: number; z: number; scale: number; seed: number; r: number }
-  | { kind: "tree"; x: number; y: number; z: number; height: number; planter: number; seed: number; r: number }
+  | { kind: "tree"; x: number; y: number; z: number; height: number; planter: number; seed: number; r: number; /** Leaf size, for small trees to look full. */ leafiness?: number }
   | {
     kind: "bench"; x: number; y: number; z: number; /** Along the seat's length. */ yaw: number; length: number; style: 0 | 1; seed: number;
     /** Benches with a view face it (1: along +normal, −1: against it); others face the side you sit down from. */
@@ -27,6 +27,7 @@ type PropShape =
 export const BENCH_DEPTH = 0.5;
 export const SEAT_HEIGHT = 0.46;
 const POT_INSET = 0.6;
+const TREE_PLANTER = 0.7;
 const SPECIES: PlantSpecies[] = ["blades", "arching", "round"];
 
 function galleryProps(room: Room, plan: FloorPlan, seed: string): PropShape[] {
@@ -41,8 +42,23 @@ function galleryProps(room: Room, plan: FloorPlan, seed: string): PropShape[] {
     const species = SPECIES[Math.floor(r() * SPECIES.length)];
     props.push({ kind: "plant", species, x: px, y: fy, z: pz, scale: 0.9 + r() * 0.5, seed: hash(seed, room.id, px, pz), r: 0.38 });
   }
-  // A bench in each floor slot, its length along the room's longer side so sitters face the long walls.
-  for (const s of plan.floorSlots.filter((s) => s.room === room.id)) {
+  // A tree in the middle. Where a floor slot is in the middle, two benches flank its planter instead
+  // of one bench in the slot, sitters facing out to the long walls.
+  const tree = centerTree(room)!;
+  const along = w >= d ? 0 : Math.PI / 2;
+  props.push({ kind: "tree", x: tree.x, y: fy, z: tree.z, height: room.height - 1.6, planter: TREE_PLANTER, seed: hash(seed, room.id, "tree"), r: TREE_PLANTER + 0.05, leafiness: 1.8 });
+  if (tree.inSlot) {
+    const off = TREE_PLANTER + 0.15 + BENCH_DEPTH / 2;
+    const style = r() < 0.5 ? 0 : 1;
+    for (const side of [1, -1] as const) {
+      props.push({
+        kind: "bench", x: tree.x + (along ? side * off : 0), y: fy, z: tree.z + (along ? 0 : side * off), yaw: along, length: 2,
+        style, seed: hash(seed, room.id, "flank", side), facing: side,
+      });
+    }
+  }
+  // A bench in each other floor slot, its length along the room's longer side so sitters face the long walls.
+  for (const s of plan.floorSlots.filter((s) => s.room === room.id && !(tree.inSlot && s.x === tree.x && s.z === tree.z))) {
     props.push({
       kind: "bench", x: s.x, y: fy, z: s.z, yaw: w >= d ? 0 : Math.PI / 2,
       length: s.r >= 1.5 ? 2.4 : 2, style: r() < 0.5 ? 0 : 1, seed: hash(seed, room.id, s.x, s.z),

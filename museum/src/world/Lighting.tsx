@@ -96,11 +96,12 @@ export function Lighting({ plan }: { plan: FloorPlan }) {
       if (!light) return;
       const room = nearest[i]?.r;
       if (!room) { light.intensity = 0; return; }
-      light.position.set(room.rect.x + room.rect.w / 2, floorY(room.level) + room.height - 1.5, room.rect.y + room.rect.d / 2);
+      // Up by the ceiling lamps, above the crown of the room's tree.
+      light.position.set(room.rect.x + room.rect.w / 2, floorY(room.level) + room.height - 0.3, room.rect.y + room.rect.d / 2);
       // The wing's theme color tints its rooms' light.
       light.color.copy(warm).lerp(new Color(room.accent), 0.3);
       light.distance = Math.max(room.rect.w, room.rect.d) * 1.5;
-      light.intensity = 65;
+      light.intensity = 110;
     });
   });
 

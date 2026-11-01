@@ -85,7 +85,7 @@ function PropsChunk({ room, props, benches, mats }: { room: number; props: Prop[
       if (p.kind === "plant") growPlant(leaves, pots, p.species, new Vector3(p.x, p.y, p.z), p.scale, p.seed);
       else if (p.kind === "tree") {
         planter(planters, new Vector3(p.x, p.y, p.z), p.planter);
-        growTree(leaves, bark, new Vector3(p.x, p.y, p.z), p.height, p.seed);
+        growTree(leaves, bark, new Vector3(p.x, p.y, p.z), p.height, p.seed, undefined, p.leafiness);
       } else if (p.kind === "ivy") {
         // Leaves face away from the balcony, toward the middle of the atrium.
         const mx = (p.x1 + p.x2) / 2, mz = (p.z1 + p.z2) / 2;

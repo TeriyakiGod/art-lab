@@ -188,7 +188,7 @@ export function planter(b: MeshBuilder, at: Vector3, r: number) {
  * A branching tree grown by recursion: bark into `bark`, leaf clusters into `leaves`. Outer branch
  * tips go into `perches`, for birds.
  */
-export function growTree(leaves: MeshBuilder, bark: MeshBuilder, at: Vector3, height: number, seed: number, perches?: Vector3[]) {
+export function growTree(leaves: MeshBuilder, bark: MeshBuilder, at: Vector3, height: number, seed: number, perches?: Vector3[], leafiness = 1) {
   const r = rng(seed);
   const barkCol = new Color("#4a3f36");
   const scale = height / 9.5;
@@ -199,12 +199,12 @@ export function growTree(leaves: MeshBuilder, bark: MeshBuilder, at: Vector3, he
     if (depth === 0 || radius < 0.02) {
       const n = 50 + Math.floor(r() * 25);
       for (let i = 0; i < n; i++) {
-        const off = new Vector3(r() - 0.5, (r() - 0.3) * 0.8, r() - 0.5).multiplyScalar(1.4 * scale);
+        const off = new Vector3(r() - 0.5, (r() - 0.3) * 0.8, r() - 0.5).multiplyScalar(1.4 * scale * (0.5 + leafiness / 2));
         const p = end.clone().add(off);
         const normal = off.clone().normalize().lerp(UP, 0.4).normalize();
         const along = new Vector3(r() - 0.5, -0.3 - r() * 0.5, r() - 0.5).normalize();
         const col = jitter(lerpColor(GREENS.mid, GREENS.light, r() * 0.8), r, 1.6);
-        diamond(leaves, p, normal, along, (0.09 + r() * 0.06) * scale, col, Math.min(1, (p.y - at.y) / height + 0.3));
+        diamond(leaves, p, normal, along, (0.09 + r() * 0.06) * scale * leafiness, col, Math.min(1, (p.y - at.y) / height + 0.3));
       }
       return;
     }

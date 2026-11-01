@@ -198,7 +198,7 @@ function hang(room: Room, runs: Run[], e: Exhibit): WallSlot | null {
       const x = L.x + L.dx * along + L.nx * ART_INSET, z = L.z + L.dz * along + L.nz * ART_INSET;
       // Viewers stand short of anything in a floor slot (a bench now, a 3D work later).
       let maxView = run.maxView;
-      for (const f of floorSlotsFor(room)) {
+      for (const f of obstaclesFor(room)) {
         const ahead = (f.x - x) * L.nx + (f.z - z) * L.nz;
         const aside = Math.abs((f.x - x) * L.dx + (f.z - z) * L.dz);
         if (ahead > 0 && aside < f.r + 0.4) maxView = Math.min(maxView, ahead - f.r - 0.45);
@@ -248,6 +248,21 @@ function floorSlotsFor(room: Room): FloorSlot[] {
   if (d >= 14 && w >= 9) return [at(0, -3.5, 1.4), at(0, 3.5, 1.4)];
   if (w >= 10 && d >= 10) return [at(0, 0, 1.5)];
   return [];
+}
+
+/** Every gallery has a tree in a planter in its middle, unless a floor slot is already there. */
+export const CENTER_TREE_R = 0.8;
+export function centerTree(room: Room) {
+  if (room.type !== "gallery") return null;
+  const x = room.rect.x + room.rect.w / 2, z = room.rect.y + room.rect.d / 2;
+  return { x, z, inSlot: floorSlotsFor(room).some((f) => f.x === x && f.z === z) };
+}
+
+/** What viewers must stand short of: floor slots, and the tree in the middle. */
+function obstaclesFor(room: Room): { x: number; z: number; r: number }[] {
+  const slots = floorSlotsFor(room);
+  const tree = centerTree(room);
+  return tree && !tree.inSlot ? [...slots, { x: tree.x, z: tree.z, r: CENTER_TREE_R }] : slots;
 }
 
 /** Sorts works into placement order: one sequence across all wings. */

@@ -2,8 +2,8 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, PlaneGeometry, Quaternion, Vector3, type Material } from "three";
 import { useShowWhenNear } from "./nearby";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import { DOOR_WIDTH, WALL_THICKNESS, floorY, type FloorPlan, type Room, type Wall } from "../../../shared/museum/generate";
-import { ceilingMaterial, floorMaterial, lightMaterial, wallMaterial } from "./materials";
+import { WALL_THICKNESS, floorY, type FloorPlan, type Room, type Wall } from "../../../shared/museum/generate";
+import { ceilingMaterial, floorMaterial, lightMaterial, steelMaterial, wallMaterial } from "./materials";
 
 /** One transform (and optional color) per instance, and the room it belongs to. */
 type Instance = { room: number; p: [number, number, number]; s: [number, number, number]; rx?: number; color?: string };
@@ -26,7 +26,10 @@ function tinted(tone: string, room: Room, amount: number) {
 
 function wallInstances(plan: FloorPlan): Instance[] {
   return plan.walls.map((w) => {
-    const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) + T; // + T closes the corners
+    // + T closes a room's corners. Corridor walls end at the face of the room walls at either end
+    // instead, so the two rooms' (differently tinted) walls never overlap and flicker.
+    const corridor = plan.rooms[w.room].type === "corridor";
+    const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) + (corridor ? -T : T);
     const h = w.y1 - w.y0;
     return {
       room: w.room,
@@ -37,37 +40,33 @@ function wallInstances(plan: FloorPlan): Instance[] {
   });
 }
 
-const floors = (rooms: Room[], y: (r: Room) => number, rx: number, color: (r: Room) => string): Instance[] =>
-  rooms.map((r) => ({ room: r.id, p: [r.rect.x + r.rect.w / 2, y(r), r.rect.y + r.rect.d / 2], s: [r.rect.w, r.rect.d, 1], rx, color: color(r) }));
+const floors = (rooms: Room[], y: (r: Room) => number, rx: number, color: (r: Room) => string, trim = 0): Instance[] =>
+  rooms.map((r) => {
+    // `trim` shortens corridors at both ends (along their length).
+    const t = r.type === "corridor" ? trim : 0, alongX = r.rect.w > r.rect.d;
+    return { room: r.id, p: [r.rect.x + r.rect.w / 2, y(r), r.rect.y + r.rect.d / 2], s: [r.rect.w - (alongX ? t : 0), r.rect.d - (alongX ? 0 : t), 1], rx, color: color(r) };
+  });
 
-/** Thin lines of light along the top and foot of every gallery wall, and down the middle of corridors. */
-function stripInstances(plan: FloorPlan): Instance[] {
-  const out: Instance[] = [];
-  for (const w of plan.walls) {
-    const room = plan.rooms[w.room];
-    const base = floorY(room.level);
-    if (room.type !== "gallery" || w.y0 > base + 0.01) continue;
-    const cx = room.rect.x + room.rect.w / 2, cz = room.rect.y + room.rect.d / 2;
-    const mx = (w.x1 + w.x2) / 2, mz = (w.z1 + w.z2) / 2;
-    const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1);
-    // Offset from the wall's line toward the room's center.
-    const off = T / 2 + 0.02;
-    const [ox, oz] = isAlongX(w) ? [0, Math.sign(cz - mz) * off] : [Math.sign(cx - mx) * off, 0];
-    const s: [number, number, number] = isAlongX(w) ? [len, 0.035, 0.035] : [0.035, 0.035, len];
-    out.push({ room: room.id, p: [mx + ox, base + room.height - 0.25, mz + oz], s, color: room.accent });
-    out.push({ room: room.id, p: [mx + ox, base + 0.06, mz + oz], s, color: room.accent });
-  }
-  for (const r of plan.rooms.filter((r) => r.type === "corridor")) {
-    const alongX = r.rect.w > r.rect.d;
-    const { x, y, w, d } = r.rect, base = floorY(r.level);
-    out.push({ room: r.id, p: [x + w / 2, base + r.height - 0.02, y + d / 2], s: alongX ? [w, 0.03, 0.06] : [0.06, 0.03, d], color: r.accent });
-    // Lines along the foot of both side walls lead the way through.
-    for (const side of [-1, 1]) {
-      const off = side * (DOOR_WIDTH / 2 - T / 2 - 0.03);
-      out.push({ room: r.id, p: [x + w / 2 + (alongX ? 0 : off), base + 0.05, y + d / 2 + (alongX ? off : 0)], s: alongX ? [w, 0.025, 0.025] : [0.025, 0.025, d], color: r.accent });
+/** Square lamps set into the ceiling: a dark rim with a glowing panel, on a grid in galleries and in a row down corridors. */
+function lampInstances(plan: FloorPlan): { rims: Instance[]; panels: Instance[] } {
+  const rims: Instance[] = [], panels: Instance[] = [];
+  for (const r of plan.rooms) {
+    if (r.type === "atrium") continue;
+    const { x, y, w, d } = r.rect, top = floorY(r.level) + r.height;
+    const size = r.type === "gallery" ? 1 : 0.6;
+    const spacing = r.type === "gallery" ? 3.6 : 3;
+    const nx = Math.max(1, Math.round(w / spacing)), nz = Math.max(1, Math.round(d / spacing));
+    // A little of the wing's theme color in the light.
+    const light = "#" + new Color("#fff4e6").lerp(new Color(r.accent), 0.12).getHexString();
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        const px = x + (w / nx) * (i + 0.5), pz = y + (d / nz) * (j + 0.5);
+        rims.push({ room: r.id, p: [px, top - 0.02, pz], s: [size + 0.1, 0.04, size + 0.1] });
+        panels.push({ room: r.id, p: [px, top - 0.045, pz], s: [size, 0.012, size], color: light });
+      }
     }
   }
-  return out;
+  return { rims, panels };
 }
 
 type InstancesProps = {
@@ -104,8 +103,8 @@ function Instances({ items, geometry, material, occluder, shadows }: InstancesPr
   );
 }
 
-type Parts = { walls: Instance[]; floors: Instance[]; ceilings: Instance[]; strips: Instance[] };
-type Shared = { box: BoxGeometry; plane: PlaneGeometry; wallMaterial: Material; floorMaterial: Material; ceilingMaterial: Material; stripMaterial: Material };
+type Parts = { walls: Instance[]; floors: Instance[]; ceilings: Instance[]; rims: Instance[]; panels: Instance[] };
+type Shared = { box: BoxGeometry; plane: PlaneGeometry; wallMaterial: Material; floorMaterial: Material; ceilingMaterial: Material; lampMaterial: Material; rimMaterial: Material };
 
 /** One room's surfaces, drawn only while the room is near (so a big museum costs no more than a small one). */
 function RoomChunk({ room, parts, shared }: { room: number; parts: Parts; shared: Shared }) {
@@ -116,7 +115,8 @@ function RoomChunk({ room, parts, shared }: { room: number; parts: Parts; shared
       <Instances items={parts.walls} geometry={shared.box} material={shared.wallMaterial} occluder shadows />
       <Instances items={parts.floors} geometry={shared.plane} material={shared.floorMaterial} shadows />
       <Instances items={parts.ceilings} geometry={shared.plane} material={shared.ceilingMaterial} shadows />
-      <Instances items={parts.strips} geometry={shared.box} material={shared.stripMaterial} />
+      <Instances items={parts.rims} geometry={shared.box} material={shared.rimMaterial} />
+      <Instances items={parts.panels} geometry={shared.box} material={shared.lampMaterial} />
     </group>
   );
 }
@@ -130,12 +130,14 @@ export function Building({ plan }: { plan: FloorPlan }) {
       walls: wallInstances(plan),
       floors: floors(plan.rooms, (r) => floorY(r.level), -Math.PI / 2, (r) => tinted(TONES[r.type].floor, r, 0.08)),
       // The atrium draws its own ceiling, with the skylight.
-      ceilings: floors(plan.rooms.filter((r) => r.type !== "atrium"), (r) => floorY(r.level) + r.height, Math.PI / 2, (r) => TONES[r.type].ceiling),
-      strips: stripInstances(plan),
+      // Corridor ceilings are as high as the doorways, so they stop at the lintels instead of sharing their underside.
+      ceilings: floors(plan.rooms.filter((r) => r.type !== "atrium"), (r) => floorY(r.level) + r.height, Math.PI / 2, (r) => TONES[r.type].ceiling, T),
+      ...lampInstances(plan),
       wallMaterial: wallMaterial(),
       floorMaterial: floorMaterial(),
       ceilingMaterial: ceilingMaterial(),
-      stripMaterial: lightMaterial(2.4),
+      lampMaterial: lightMaterial(2.2),
+      rimMaterial: steelMaterial(),
     };
   }, [plan]);
 
@@ -147,8 +149,8 @@ export function Building({ plan }: { plan: FloorPlan }) {
   }, [plan]);
   const upstairs = plan.rooms.filter((r) => r.level > 0);
   const chunks = useMemo(() => {
-    const by = new Map<number, Parts>(plan.rooms.map((r) => [r.id, { walls: [], floors: [], ceilings: [], strips: [] }]));
-    for (const k of ["walls", "floors", "ceilings", "strips"] as const) for (const it of parts[k]) by.get(it.room)![k].push(it);
+    const by = new Map<number, Parts>(plan.rooms.map((r) => [r.id, { walls: [], floors: [], ceilings: [], rims: [], panels: [] }]));
+    for (const k of ["walls", "floors", "ceilings", "rims", "panels"] as const) for (const it of parts[k]) by.get(it.room)![k].push(it);
     return [...by];
   }, [plan, parts]);
 

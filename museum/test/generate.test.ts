@@ -225,6 +225,18 @@ describe("props", () => {
     }
   });
 
+  it("puts a tree in the middle of every gallery, clear of every other prop", () => {
+    for (const room of p.rooms.filter((r) => r.type === "gallery")) {
+      const cx = room.rect.x + room.rect.w / 2, cz = room.rect.y + room.rect.d / 2;
+      const tree = props.find((q) => q.kind === "tree" && q.x === cx && q.z === cz);
+      expect(tree, `tree in room ${room.id}`).toBeDefined();
+      for (const q of props.filter((q) => q.room === room.id && q !== tree)) {
+        const edges = q.kind === "bench" ? [-1, 0, 1].map((t) => [q.x + Math.cos(q.yaw) * t * q.length / 2, q.z - Math.sin(q.yaw) * t * q.length / 2]) : [[q.x, q.z]];
+        for (const [x, z] of edges) expect(Math.hypot(x - cx, z - cz), `${q.kind} against the tree`).toBeGreaterThan(tree!.r);
+      }
+    }
+  });
+
   it("puts every prop somewhere walkable", () => {
     for (const prop of props) {
       if (prop.kind === "ivy") continue;
